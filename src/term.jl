@@ -1,11 +1,12 @@
 """
     TermBackend(columns=nothing; columns_kwargs=Dict{Symbol,Any}())
 
-A backend that draws one progress bar per phase with
-[Term.jl](https://github.com/FedeClaudi/Term.jl)'s own `ProgressBar`. Needs the
-Term extension loaded: run `using Term` before this backend is selected.
+A backend that draws one progress bar per chain with
+[Term.jl](https://github.com/FedeClaudi/Term.jl)'s own `ProgressBar`, each bar
+showing the phase its chain is in. Needs the Term extension loaded: run
+`using Term` before this backend is selected.
 
-`columns` chooses which of Term's columns each phase's bar is built from. Left
+`columns` chooses which of Term's columns each chain's bar is built from. Left
 at `nothing`, the extension substitutes its own default list: a description,
 the bar itself, the position and percentage for a determinate phase, and an
 estimate of the time remaining — but no column for elapsed time, which the
