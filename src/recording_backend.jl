@@ -1,12 +1,10 @@
 """
     RecordingBackend()
 
-A backend that renders nothing and instead records, in order, every call the
-interface makes to it — `setup`, `phase_opened`, `phase_closed`, `refresh`,
-`teardown` — in `calls`. Later tests use it to assert the order a run drives
-a backend through without needing to render anything. `setup` returns the
-`RecordingBackend` itself as the handle, so `calls` is reachable both before
-and after a run.
+A backend that renders nothing and records every call the interface makes to
+it, in order, in `calls`: `setup`, `phase_opened`, `phase_closed`, `refresh`
+and `teardown`. `setup` returns the `RecordingBackend` itself as the handle,
+so `calls` is reachable both before and after a run.
 
 Each entry of `calls` is one of:
 

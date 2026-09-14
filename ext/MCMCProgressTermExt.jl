@@ -21,16 +21,14 @@ using Term.Progress:
 
 The columns [`TermBackend`](@ref MCMCProgress.TermBackend) builds each chain's
 bar from when given no explicit column configuration: a description, the bar
-itself, the position and percentage for a determinate phase, and an estimate
-of the time remaining. It carries no column for elapsed time — with several
-chains each showing a phase, an elapsed-time column alongside everything else
-leaves too little width to read.
+itself, the position and percentage for a determinate phase, and an estimate of
+the time remaining. There is no column for elapsed time, which would leave too
+little width to read at several chains wide.
 
-A counting or binary phase has no total to draw a bar or estimate a remaining
-time from. `ProgressJob.start!` removes `ProgressColumn` and adds Term's own
-spinner column for such a phase, and `PercentageColumn`/`ETAColumn` render
-blank once a job's `N` is `nothing`, all on Term's own side — so this one list
-serves every phase kind without a separate list for phases with no total.
+This one list serves every phase kind. For a phase with no total,
+`ProgressJob.start!` removes `ProgressColumn` and adds Term's spinner column,
+and `PercentageColumn` and `ETAColumn` render blank once a job's `N` is
+`nothing`.
 """
 const _DEFAULT_COLUMNS = DataType[
     DescriptionColumn,
@@ -67,22 +65,19 @@ The mutable state behind [`TermBackend`](@ref MCMCProgress.TermBackend): the
 configuration, and one `Term.Progress.ProgressJob` per chain, keyed by the
 chain's index.
 
-One job per chain, for the whole run: every job is created before the bar
-starts and none is ever added or removed while it runs. `Term.Progress`
-scrolls the terminal for each job added to a running bar and identifies a job
-to remove by an `id` it derives from how many jobs the bar currently holds —
-so a display that added a job per phase would scroll the terminal at every
-phase boundary and, once any job had been removed, delete some other chain's
-bar in place of the one it meant to. A chain runs one phase at a time, so one
-bar per chain can show everything there is to show.
+Every job is created before the bar starts, and none is added or removed while
+it runs. Term scrolls the terminal for each job added to a running bar, and
+identifies a job to remove by an `id` derived from how many jobs the bar holds,
+so adding or removing jobs mid-run scrolls the terminal at every phase boundary
+and deletes the wrong chain's bar. A chain runs one phase at a time, so one bar
+per chain shows everything there is to show.
 
-`template_columns` exists because a freshly added job's `columns` field starts
-out as the very array held by `pbar.columns`, not a copy of it, and
-`ProgressJob.start!` mutates that array in place — filtering out the bar column
-and pushing a spinner column onto it — whenever the job's total is `nothing`.
-Every job therefore gets a fresh copy of `template_columns`, which keeps one
-chain's columns from leaking into another's and rebuilds the columns a phase
-needs when the chain moves on to the next.
+`template_columns` is needed because a freshly added job's `columns` field
+starts out as the array held by `pbar.columns` rather than a copy of it, and
+`ProgressJob.start!` mutates that array in place whenever the job's total is
+`nothing`, filtering out the bar column and pushing a spinner column onto it.
+Every job gets a fresh copy, which keeps one chain's columns out of another's
+and rebuilds the columns each new phase needs.
 """
 struct TermHandle
     pbar::ProgressBar
@@ -109,9 +104,9 @@ function setup(backend::TermBackend, snapshot::RunSnapshot)
 end
 
 # Point a chain's job at a new phase: fresh columns for the phase's kind, the
-# position back to zero, and — through `ProgressJob.start!` — a fresh
-# `startime`, so the estimate of the time remaining is timed from this phase
-# rather than from the phase the chain was in before (ADR-0004).
+# position back to zero, and a fresh `startime` from `ProgressJob.start!`, so
+# the estimate of the time remaining is timed from this phase and not from the
+# phase the chain was in before.
 function _restart!(handle::TermHandle, job::ProgressJob, description, total)
     job.description = description
     job.N = total
@@ -135,17 +130,16 @@ phase_opened(handle::TermHandle, chain_index::Integer, phase::PhaseSnapshot) = (
 )
 
 # The position is stored straight onto the job rather than through
-# `ProgressJob.update!`, which reads a position given to a job that has reached
-# its total as a request to stop the job — and `ProgressJob.stop!` sleeps for
-# 50 ms, which on the refresh task is 50 ms in which nothing is drawn.
+# `ProgressJob.update!`, which reads a position given to a job already at its
+# total as a request to stop the job, and `ProgressJob.stop!` sleeps for 50 ms:
+# on the refresh task, 50 ms in which nothing is drawn.
 _setposition!(job::ProgressJob, position::Integer) = (job.i=position; nothing)
 
 function phase_closed(handle::TermHandle, chain_index::Integer, phase::PhaseSnapshot)
     job = handle.jobs[chain_index]
     _setposition!(job, phase.position)
-    # `finished` is what makes a spinner column settle on its tick; the job is
-    # left in place so the chain's last phase stays visible until the chain
-    # opens another.
+    # `finished` settles a spinner column on its tick. The job stays in place,
+    # so the chain's last phase remains visible until it opens another.
     job.finished = true
     return nothing
 end
@@ -161,10 +155,10 @@ function refresh(handle::TermHandle, snapshot::RunSnapshot)
     return nothing
 end
 
-# The refresh task has already stopped by the time a run is torn down, so this
-# render is what puts every chain's closing position on the screen; without it
-# the display keeps whatever the last refresh drew, up to a refresh period
-# short of where the run actually ended.
+# The refresh task has stopped by the time a run is torn down, so this render is
+# what puts every chain's closing position on the screen. Without it the display
+# keeps what the last refresh drew, up to a refresh period short of where the
+# run ended.
 function teardown(handle::TermHandle, ::RunSnapshot)
     render(handle.pbar)
     stop!(handle.pbar)

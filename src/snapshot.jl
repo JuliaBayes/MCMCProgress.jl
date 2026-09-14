@@ -1,13 +1,12 @@
 """
     PhaseSnapshot{K<:PhaseKind}
 
-An immutable copy of a phase's state at one instant: an identity distinct from
-its name, plus the same name, kind, position, opening time, and closing time a
-live [`Phase`](@ref) carries. Holds no reference back into live state.
+An immutable copy of a phase's state at one instant: an `id`, and the name,
+kind, position, opening time and closing time a live [`Phase`](@ref) carries.
+Holds no reference back into live state.
 
-`id` is what lets a backend key a bar on the phase itself rather than on its
-name — two phases on one chain may share a name (a sampler that revisits
-adaptation, say) and still be told apart by comparing `id`.
+Two phases on one chain may share a name, as when a sampler revisits adaptation,
+so `id` is what tells them apart.
 """
 struct PhaseSnapshot{K<:PhaseKind}
     id::UInt
@@ -29,8 +28,8 @@ PhaseSnapshot(id, name::AbstractString, kind::PhaseKind, position, opened, close
 
 An immutable copy of a chain's state at one instant: its index, its phases as
 [`PhaseSnapshot`](@ref)s, and its outcome (`nothing` while still running). The
-phases are held in a `Tuple`, so the snapshot cannot grow or shrink after it is
-taken.
+phases are held in a `Tuple`, which fixes their number for the life of the
+snapshot.
 """
 struct ChainSnapshot
     index::Int
@@ -60,15 +59,14 @@ RunSnapshot(label::AbstractString, chains) = RunSnapshot(String(label), Tuple(ch
     snapshot(r::Run) -> RunSnapshot
 
 Copy live state into an immutable picture of it. A chain's phases, their closure
-and its outcome are read while the chain's lock is held, so the copy shows a
+and its outcome are read while the chain's lock is held, so the copy shows the
 chain as it was at one instant: no phase appears half-opened, and a phase shown
 as closed carries the position it finished on.
 
-The chains of a run are copied one after another, each under its own lock, which
-is what keeps a chain reporting on one task from waiting on a chain reporting on
-another. A run snapshot is therefore a sequence of chains each caught at an
-instant, rather than every chain caught at the same instant — a distinction with
-no meaning for chains that run independently.
+The chains of a run are copied one after another, each under its own lock, so a
+chain reporting on one task never waits on a chain reporting on another. A run
+snapshot is a sequence of chains each caught at an instant, not every chain
+caught at the same instant.
 """
 function snapshot(p::Phase)
     return lock(p.lock) do

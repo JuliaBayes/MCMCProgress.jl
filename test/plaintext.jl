@@ -69,9 +69,7 @@
 end
 
 @testset "refresh writes only when the displayed percentage bucket changes" begin
-    # States the rule under test: a determinate phase's line is written again
-    # only once its percentage has moved into a new five-point bucket (0, 5,
-    # 10, … 100) since the last line written for that chain.
+    # The buckets are five percentage points wide: 0, 5, 10, … 100.
     io = IOBuffer()
     backend = PlainTextBackend(io)
     rs0 = RunSnapshot("Sampling mymodel", [ChainSnapshot(1, PhaseSnapshot[], nothing)])
@@ -105,10 +103,8 @@ end
 end
 
 @testset "refresh writes a counting phase's line only when its position crosses the next multiple of a hundred" begin
-    # States the rule under test: a counting phase has no total to compute a
-    # percentage from, so its line is written again only once its position has
-    # crossed the next multiple of a hundred since the last line written for
-    # that chain.
+    # A counting phase has no total, so it buckets by position rather than by
+    # percentage.
     io = IOBuffer()
     backend = PlainTextBackend(io)
     rs0 = RunSnapshot("Sampling mymodel", [ChainSnapshot(1, PhaseSnapshot[], nothing)])

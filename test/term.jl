@@ -1,13 +1,9 @@
-# Term writes control sequences straight to the process's real `stdout`
-# whenever a job starts, stops, or a bar renders — `Term.Progress.ProgressJob`
-# and `ProgressBar`'s own `start!`/`stop!`/`addjob!` are not parameterised by
-# an `IO` argument the way `render` is. Wrapping every call into the
-# extension in `quietly` redirects that real `stdout` to `devnull` for the
-# duration of the call, so the suite prints nothing and a failing `@test`
-# outside the wrapped call still reports normally.
+# Term's `start!`, `stop!` and `addjob!` write control sequences to the real
+# `stdout` and take no `IO` argument the way `render` does, so every call into
+# the extension is wrapped in `quietly` to keep the suite's output clean.
 quietly(f) = redirect_stdout(f, devnull)
 
-# `quietly`, but keeping what was written so a test can assert on what the
+# `quietly`, but keeping what was written, so a test can assert on what the
 # terminal was told to draw.
 function loudly(f)
     pipe = Pipe()
@@ -46,7 +42,7 @@ end
     @test Set(keys(handle.jobs)) == Set(1:3)
 
     # Term scrolls the terminal for every job added to a running bar, so the
-    # number of jobs must not change as chains move from phase to phase.
+    # number of jobs must not change as chains move between phases.
     quietly() do
         for j in 1:3
             phase_opened(
@@ -121,9 +117,9 @@ end
         )
     end
 
-    # Chains 2 to 4 are still in warmup and must still say so: Term identifies a
-    # job by an `id` it derives from how many jobs the bar holds, so a display
-    # that added and removed a job per phase deleted another chain's bar here.
+    # Chains 2 to 4 are still in warmup and must still say so. Term identifies a
+    # job by an `id` derived from how many jobs the bar holds, so a display that
+    # added and removed a job per phase deletes another chain's bar here.
     for j in 2:4
         @test handle.jobs[j].description == "chain $j · Warmup"
         @test handle.jobs[j].N == 40
@@ -276,9 +272,9 @@ end
     end
     job = handle.jobs[1]
 
-    # ADR-0004: Term times a job from its own `startime`. Pointing a chain's bar
-    # at a new phase re-stamps that field, so the sampling estimate starts now
-    # rather than 0.3 s ago with the adaptation's.
+    # Term times a job from its own `startime`. Pointing a chain's bar at a new
+    # phase re-stamps that field, so the sampling estimate starts now rather
+    # than 0.3 s ago with the adaptation's.
     @test job.startime >= before_sampling_opened
     @test (Dates.now() - job.startime) < Dates.Millisecond(200)  # well under the 300 ms adaptation
 
@@ -310,9 +306,8 @@ end
         phase_opened(handle, 1, sampling)
     end
 
-    # The refresh task has stopped by the time a run is torn down, so this is
-    # the only chance to draw the closing positions: without it the terminal
-    # keeps a frame from up to a refresh period before the run ended.
+    # Tearing down is the only chance to draw the closing positions, the refresh
+    # task having stopped by then.
     drawn = loudly() do
         phase_closed(handle, 1, closed)
         teardown(handle, RunSnapshot(rs0.label, [ChainSnapshot(1, [closed], finished)]))
@@ -335,9 +330,8 @@ end
     end
     @test length(handle.pbar.jobs) == 2
 
-    # The core closes every phase a run left open before tearing the backend
-    # down, however the run ends (`endrun!` in scope.jl) — simulating that
-    # sequence here is what an interruption looks like from the backend side.
+    # `endrun!` closes every phase a run left open before tearing the backend
+    # down, however the run ends; this is that sequence seen from the backend.
     p1_closed = PhaseSnapshot(UInt(1), "Warmup", Determinate(100), 40, UInt64(0), UInt64(1))
     p2_closed =
         PhaseSnapshot(UInt(2), "Finding step size", Binary(), 0, UInt64(0), UInt64(1))

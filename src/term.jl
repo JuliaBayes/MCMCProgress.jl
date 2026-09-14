@@ -9,16 +9,14 @@ showing the phase its chain is in. Needs the Term extension loaded: run
 `columns` chooses which of Term's columns each chain's bar is built from. Left
 at `nothing`, the extension substitutes its own default list: a description,
 the bar itself, the position and percentage for a determinate phase, and an
-estimate of the time remaining — but no column for elapsed time, which the
-extension's own documentation explains. Passing a `Vector` of Term column
-types picks exactly those columns instead, and passing one of Term's own
-preset symbols (such as `:minimal`) is handed to `ProgressBar` unchanged.
+estimate of the time remaining, but no column for elapsed time. A `Vector` of
+Term column types picks those columns instead, and one of Term's preset
+symbols (such as `:minimal`) is handed to `ProgressBar` unchanged.
 `columns_kwargs` carries keyword arguments through to individual columns,
-keyed by column type name, exactly as `Term.Progress.ProgressBar` itself
-accepts.
+keyed by column type name, as `Term.Progress.ProgressBar` accepts them.
 
 The core holds this configuration without knowing what a column is; the
-extension is what turns it into an actual `Term.Progress.ProgressBar`.
+extension turns it into a `Term.Progress.ProgressBar`.
 """
 struct TermBackend{C}
     columns::C

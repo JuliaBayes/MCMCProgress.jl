@@ -1,8 +1,8 @@
-# A sampler that owns its own loops, and the reporter it reports through. Between
-# them they stand for foreign sampling code of the shape DynamicHMC has: the
-# sampler drives adaptation and sampling itself and calls back with an absolute
-# step number from inside those loops. Nothing here can be wrapped in a block
-# belonging to the caller, which is the case the phase verbs exist to serve.
+# A sampler that owns its own loops, and the reporter it reports through. They
+# stand for foreign sampling code of the shape DynamicHMC has: the sampler drives
+# adaptation and sampling itself and calls back with an absolute step number from
+# inside those loops, so none of it can be wrapped in a block belonging to the
+# caller.
 
 """
     PhaseReporter(chain, name, total=nothing)
@@ -30,8 +30,8 @@ end
 PhaseReporter(c::MCMCProgress.Chain, name::AbstractString, total=nothing) =
     PhaseReporter(c, openphase!(c, name, phasekind(total)), Int[], Int[])
 
-# A sampler passes a plain total, or nothing where it knows none, and the
-# reporter is what turns that into a kind of phase.
+# A sampler passes a plain total, or nothing where it knows none; the reporter
+# turns that into a kind of phase.
 phasekind(total::Integer) = Determinate(total)
 phasekind(::Nothing) = Counting()
 
@@ -122,9 +122,9 @@ SamplerPlan(;
     failat,
 )
 
-# Adapt, announce the move into sampling, sample, end. Every position reported
-# here comes from inside a loop this function owns, and the phase the reports
-# land in changes between those loops.
+# Adapt, announce the move into sampling, sample, end. Every position comes from
+# inside a loop this function owns, and the phase the reports land in changes
+# between those loops.
 function foreignsample!(reporter::PhaseReporter, plan::SamplerPlan)
     for step in plan.warmup
         report!(reporter, step; stepsize=0.05)
@@ -143,10 +143,9 @@ function foreignsample!(reporter::PhaseReporter, plan::SamplerPlan)
 end
 
 # Hand every chain of `run` to the sampler, each on a task of its own, and give
-# back the reporters so a test can read what the sampler reported. A run's body
-# calls this and reports nothing itself: a chain's first phase opens as its
-# reporter is created, and every report after that is made from inside the
-# sampler.
+# back the reporters so a test can read what the sampler reported. The run's body
+# reports nothing itself: a chain's first phase opens as its reporter is created,
+# and every report after that comes from inside the sampler.
 function drivechains(run::MCMCProgress.Run, plans::AbstractVector{SamplerPlan})
     reporters = map(eachindex(plans)) do j
         PhaseReporter(chain(run, j), "Warmup", plans[j].warmuptotal)
@@ -171,7 +170,7 @@ function phasecalls(backend::MCMCProgress.RecordingBackend, j::Integer)
 end
 
 # A chain that adapts and then samples, reporting every step number of both
-# phases. What each test varies it states itself.
+# phases.
 plainplan(; kwargs...) =
     SamplerPlan(; warmup=1:12, sampling=1:20, warmuptotal=12, samplingtotal=20, kwargs...)
 

@@ -4,10 +4,9 @@
 # Every scene runs through whichever backend is asked for on the command line,
 # so the three backends can be compared against each other.
 #
-# The sampler each scene drives is fake and depends on nothing beyond Base and
-# MCMCProgress: it sleeps for a small, slightly randomised interval per step
-# rather than doing any real work, which is what keeps every scene to a few
-# seconds regardless of the machine it runs on.
+# The sampler each scene drives is fake: it sleeps for a small, slightly
+# randomised interval per step rather than doing any work, which holds every
+# scene to a few seconds on any machine.
 #
 # Run `julia --project=examples examples/gallery.jl --help` for usage.
 
@@ -129,9 +128,8 @@ function scene_failed(backend)
     return nothing
 end
 
-# The same shape as `scene_failed`, but raises `InterruptException` instead of
-# an ordinary error, standing in for Ctrl-C. Raising it from the body rather
-# than waiting for a real interrupt is what makes this scene reproducible.
+# The same shape as `scene_failed`, but raises `InterruptException` instead of an
+# ordinary error, which is what Ctrl-C delivers.
 function scene_interrupted(backend)
     progress(; label="A run that is interrupted", nchains=2, backend) do run
         rundeterminate!(chain(run, 1), "Sampling", 20)
@@ -148,10 +146,9 @@ end
 const SPINNER_STYLES = (:dot, :circle, :toggle, :toggle2, :bar, :greek)
 
 # Every spinner style Term ships, running side by side. A run's `TermBackend`
-# draws every phase's bar from the same column configuration, so there is no
-# way to show several spinner styles at once through the backend interface;
-# this scene talks to Term.Progress directly instead, which is the one place
-# in the gallery that does.
+# draws every bar from one column configuration, so several spinner styles at
+# once cannot be shown through the backend interface; this is the one scene that
+# talks to Term.Progress directly.
 function scene_spinners(_backend)
     pbar = Term.Progress.ProgressBar(; columns=:spinner, title="Term's spinner styles")
     Term.Progress.start!(pbar)
@@ -285,10 +282,10 @@ function resolvebackendname(scene::Scene, requested::Union{AbstractString,Nothin
 end
 
 # Build the backend named `name` and call `f` with it. The ProgressLogging
-# backend emits log records and draws nothing itself, so it shows up only once
-# a logger that understands those records is installed: `TerminalLogger` from
-# TerminalLoggers.jl is one, and this installs it for the duration of the call
-# and restores whatever logger was active before.
+# backend emits log records and draws nothing itself, so it shows up only once a
+# logger that understands those records is installed; `TerminalLogger` from
+# TerminalLoggers.jl is installed here for the duration of the call, and the
+# logger that was active before is restored after it.
 function withbackend(f, name::AbstractString)
     if name == "plaintext"
         f(PlainTextBackend())

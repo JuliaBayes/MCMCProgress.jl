@@ -75,8 +75,7 @@ function MCMCProgress.teardown(backend::FailingBackend, ::RunSnapshot)
 end
 
 # Twenty milliseconds, so a body of a tenth of a second sees several refreshes.
-# A caller gets `MCMCProgress.REFRESH_PERIOD`; the tests here name their own
-# clock to keep from waiting seconds for a handful of refreshes.
+# A caller gets `MCMCProgress.REFRESH_PERIOD` instead.
 const TEST_PERIOD = UInt64(20_000_000)
 
 quickrun(f, backend; nchains::Integer=1, period::UInt64=TEST_PERIOD) =
@@ -86,8 +85,7 @@ callnames(backend::MCMCProgress.RecordingBackend) = [call[1] for call in backend
 
 finalsnapshot(backend::MCMCProgress.RecordingBackend) = last(backend.calls)[2]
 
-# The middle value of `xs`, which says what the whole sequence does without one
-# stray reading deciding it.
+# The middle value of `xs`, so one stray reading does not decide the result.
 middling(xs) = sort(xs)[(length(xs)+1)÷2]
 
 @testset "progress drives a backend from setup to teardown" begin
@@ -195,7 +193,7 @@ end
 
     @test caught === blewup  # the same object, not a copy and not a wrapper
 
-    # The display is still finished off, which is what leaves a terminal usable.
+    # The display is still finished off, which is what leaves the terminal usable.
     @test last(callnames(backend)) === :teardown
     final = finalsnapshot(backend)
     @test [c.outcome for c in final.chains] == [failed, failed]
@@ -244,14 +242,13 @@ end
             try
                 quickrun(body, backend)
             catch
-                # Which exception reaches the caller is asserted elsewhere; what
-                # matters here is what the backend is told, and when.
+                # This testset asserts what the backend is told, and when.
             end
 
             names = callnames(backend)
             # A tenth of a second on a twenty millisecond clock: several
-            # refreshes are due, and one is asserted so that the rest of this
-            # testset is not read as passing on a display that never ran.
+            # refreshes are due, and at least one must have happened for the
+            # assertions below to mean anything.
             @test count(==(:refresh), names) >= 1
             @test last(names) === :teardown  # nothing is drawn after the teardown
 

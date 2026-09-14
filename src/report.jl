@@ -6,7 +6,7 @@
     chain(run::Run, index::Integer) -> Chain
 
 The chain at `index` within `run`. A run's chains are fixed when it is created,
-so this is a plain lookup that no other task can be in the middle of changing.
+so this lookup takes no lock.
 
 ```julia
 c = chain(run, j)
@@ -57,22 +57,17 @@ end
     advance!(phase::Phase, i::Integer)
 
 Record that `phase` has reached position `i`. The position is absolute: `i`
-replaces whatever the position was, rather than being added to it, so a report
-that is duplicated or dropped cannot make the position drift away from the
-truth.
+replaces the previous position rather than adding to it, so a duplicated or
+dropped report cannot make the position drift.
 
-This is a single atomic store and takes no lock, which is what makes it cheap
-enough to call on every iteration of a sampler.
+This is a single atomic store and takes no lock, so it can be called on every
+iteration of a sampler.
 
-On a `Binary` phase — one with no count at all — `advance!` does nothing, so
-reporting code shared between phases of every kind need not ask what kind it
-holds.
+On a `Binary` phase, which has no count, `advance!` does nothing.
 
-A `Determinate` phase cannot advance past the total it declared, no phase can
-advance to a negative position, and a closed phase cannot advance at all. Each of
-these is an error rather than a quietly corrected value, because each means the
-reporting code and the phase disagree about what the phase is. None of them apply
-to a `Binary` phase, which has no position to be wrong about.
+Throws if a `Determinate` phase would advance past the total it declared, if any
+phase would advance to a negative position, or if the phase is closed. None of
+these apply to a `Binary` phase, which has no position.
 """
 advance!(::Phase{Binary}, ::Integer) = nothing
 
@@ -118,8 +113,8 @@ function closephase!(p::Phase)
 end
 
 # Stamp the closing time and withdraw the phase from reporting. The caller holds
-# the phase's lock, which is what publishes the closing time to a snapshot.
-# `open` is atomic because `advance!` reads it without taking that lock.
+# the phase's lock, which publishes the closing time to a snapshot. `open` is
+# atomic because `advance!` reads it without taking that lock.
 function close!(p::Phase, at::UInt64)
     p.closed = at
     @atomic :monotonic p.open = false
@@ -132,8 +127,7 @@ end
 Close every phase of `c` that is still open, stamping one closing time for all
 of them. A chain with nothing open is left alone.
 
-This is how a run's scope finishes off a phase whose caller never closed it,
-whether because it forgot or because an exception unwound past the call.
+This is how a run's scope finishes off a phase the caller never closed.
 """
 function closeopenphases!(c::Chain)
     at = time_ns()

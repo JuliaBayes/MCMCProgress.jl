@@ -3,10 +3,9 @@ using Printf: @sprintf
 """
     PlainTextHandle
 
-The mutable state behind [`PlainTextBackend`](@ref): the destination `io`,
-the clock for timing an open phase, the run's label and chain count (fixed
-for the run and captured once in [`setup`](@ref)), and the last progress key
-written for each chain index.
+The mutable state behind [`PlainTextBackend`](@ref): the destination `io`, the
+clock for timing an open phase, the run's label and chain count, and the last
+progress key written for each chain index.
 """
 mutable struct PlainTextHandle{F}
     io::IO
@@ -22,17 +21,13 @@ end
 PlainTextHandle(io::IO, now::F, label::AbstractString, n_chains::Integer) where {F} =
     PlainTextHandle{F}(io, now, String(label), Int(n_chains), Dict{Int,Tuple{UInt,Int}}())
 
-# A determinate phase's percentage, rounded to a multiple of five (0, 5, …,
-# 100). A counting phase has no total, so there is no percentage to round;
-# its bucket is its position rounded down to the nearest multiple of
-# `_COUNTING_STEP` instead, following CmdStan's `refresh` argument, which
-# reports progress every 100 iterations by default. Either way, `refresh`
-# writes a new line for a chain only when this bucket has moved since the
-# last line it wrote for that chain: rounding, rather than writing on every
-# change of position, is what keeps a ten-thousand-step phase to a few dozen
-# lines instead of ten thousand. A binary phase has no position at all, so
-# its bucket is constant and `refresh` writes nothing further for it until
-# the phase closes.
+# How coarse the output is: `refresh` writes a line for a chain only once the
+# phase's bucket has moved, which holds a ten-thousand-step phase to a few dozen
+# lines. A determinate phase's bucket is its percentage rounded to a multiple of
+# five; a counting phase, having no total, buckets its position by
+# `_COUNTING_STEP`, matching CmdStan's default `refresh` of 100 iterations; a
+# binary phase has no position, so its bucket never moves and nothing further is
+# written for it until the phase closes.
 const _COUNTING_STEP = 100
 
 _bucket(::PhaseSnapshot{Binary}) = 0
@@ -60,9 +55,8 @@ _phase_text(phase::PhaseSnapshot{Determinate}) = string(
 _phase_text(phase::PhaseSnapshot{Counting}) = string(phase.name, " ", phase.position)
 _phase_text(phase::PhaseSnapshot{Binary}) = phase.name
 
-# Elapsed time for an open phase depends on `handle.now`, injected so tests can
-# fix it; a closed phase's own `opened`/`closed` fields already determine its
-# elapsed time without consulting the clock at all.
+# An open phase is timed against `handle.now`; a closed phase's `opened` and
+# `closed` fields fix its elapsed time without consulting the clock.
 function _elapsed_seconds(handle::PlainTextHandle, phase::PhaseSnapshot)
     finish = phase.closed === nothing ? handle.now() : phase.closed
     return (finish - phase.opened) / 1e9

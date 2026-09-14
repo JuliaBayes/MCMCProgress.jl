@@ -3,8 +3,7 @@
 
 What a phase can report about itself: whether its length is known, whether it
 counts without a known length, or whether it has no count at all. A phase's kind
-is fixed for its lifetime, so code can dispatch on the kind rather than branch on
-a keyword.
+is fixed for its lifetime.
 
 See [`Determinate`](@ref), [`Counting`](@ref), [`Binary`](@ref).
 """
@@ -30,8 +29,8 @@ end
 """
     Counting()
 
-A phase that reports a rising count with no total, because the total stays
-unknown even once the phase has begun — an adaptive stopping rule, for example.
+A phase that reports a rising count with no total: the total stays unknown even
+once the phase has begun, as under an adaptive stopping rule.
 """
 struct Counting <: PhaseKind end
 

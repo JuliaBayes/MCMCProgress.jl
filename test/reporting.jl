@@ -151,9 +151,9 @@ end
     p1 = openphase!(c1, "Warmup", Determinate(10))
     done = Threads.Atomic{Bool}(false)
 
-    # Hold the lock that guards chain 1's structure for as long as another task
-    # reports a position on chain 1 and opens, advances and closes a phase on
-    # chain 2. Neither needs this lock, so both finish while it is held.
+    # Hold the lock guarding chain 1's structure while another task reports a
+    # position on chain 1 and runs a phase on chain 2. Neither needs that lock,
+    # so both finish while it is held.
     lock(c1.lock) do
         wait(Threads.@spawn begin
             advance!(p1, 7)
@@ -178,9 +178,8 @@ end
     r = MCMCProgress.Run("Sampling mymodel", nchains)
 
     # Each chain reports its own positions and, every so often, snapshots the
-    # whole run. A snapshot is therefore always read on one task while the other
-    # chains are writing on theirs, without depending on when the scheduler
-    # gets round to a separate reader.
+    # whole run, so a snapshot is read on one task while the other chains write
+    # on theirs.
     records = map(1:nchains) do j
         Threads.@spawn begin
             c = chain(r, j)
@@ -199,8 +198,7 @@ end
         end
     end
 
-    # Each chain's own sequence of snapshots, kept apart so that one can be read
-    # in the order it was taken, and all of them together.
+    # Each chain's snapshots in the order it took them, and all of them together.
     perchain = map(fetch, records)
     seen = reduce(vcat, perchain)
     push!(seen, MCMCProgress.snapshot(r))
@@ -209,9 +207,8 @@ end
     names = ["Finding step size", "Warmup"]
 
     # Only a snapshot taken while two chains were both partway through a phase
-    # says anything about reading live state as it changes. Count those, and say
-    # so when there are none rather than let the assertions below read as though
-    # they had been tested against a run in flight.
+    # says anything about reading live state as it changes, so the count of
+    # those is reported alongside the assertions below.
     reporting(cs) = any(ps -> ps.closed === nothing && 0 < ps.position < total, cs.phases)
     overlapping = count(s -> count(reporting, s.chains) >= 2, seen)
     if overlapping == 0
@@ -220,11 +217,10 @@ end
         @info "$overlapping of $(length(seen)) snapshots caught two or more chains reporting at once across $(Threads.nthreads()) threads"
     end
 
-    # One snapshot on its own. Phases are discovered as a chain announces them,
-    # so a snapshot shows some prefix of the phases the chain will open — never
-    # a phase out of order and never a partly built one — and a phase seen as
-    # closed carries the position it finished on, because the lock that
-    # publishes the closing time publishes the last position stored before it.
+    # What one snapshot must show: a prefix of the phases the chain will open,
+    # none out of order or partly built, and a closed phase carrying the position
+    # it finished on, since the lock that publishes the closing time also
+    # publishes the last position stored before it.
     function consistent(s::RunSnapshot)
         length(s.chains) == nchains || return false
         for (j, cs) in pairs(s.chains)
