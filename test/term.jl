@@ -356,7 +356,7 @@ end
                 MCMCProgress.TermBackend(),
                 MCMCProgress.REFRESH_PERIOD,
             ) do run
-                open_phase!(chain(run, 1), "Warmup", Determinate(100))
+                open_phase!(chain_at(run, 1), "Warmup", Determinate(100))
                 throw(InterruptException())
             end
         catch exception

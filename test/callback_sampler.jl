@@ -128,7 +128,7 @@ end
 # report after a reporter is created comes from inside the sampler.
 function drive_chains(run::MCMCProgress.Run, plans::AbstractVector{SamplerPlan})
     reporters = map(eachindex(plans)) do j
-        PhaseReporter(chain(run, j), "Warmup", plans[j].warmuptotal)
+        PhaseReporter(chain_at(run, j), "Warmup", plans[j].warmuptotal)
     end
     @sync for j in eachindex(plans)
         Threads.@spawn foreign_sample!(reporters[j], plans[j])
@@ -305,7 +305,7 @@ end
             nchains=1,
             backend,
         ) do run
-            reporter = PhaseReporter(chain(run, 1), "Warmup", 12)
+            reporter = PhaseReporter(chain_at(run, 1), "Warmup", 12)
             report!(reporter, 7)
             leftbehind = reporter.phase
             next_phase!(reporter, "Sampling", 20)
@@ -326,7 +326,7 @@ end
             nchains=1,
             backend,
         ) do run
-            reporter = PhaseReporter(chain(run, 1), "Warmup", 12)
+            reporter = PhaseReporter(chain_at(run, 1), "Warmup", 12)
             report!(reporter, 3)
             # Opening a phase without closing the current one throws.
             open_phase!(reporter.chain, "Sampling", Determinate(20))

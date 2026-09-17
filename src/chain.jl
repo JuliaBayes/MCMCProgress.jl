@@ -20,7 +20,6 @@ mutable struct Chain
         outcome::Union{Outcome,Nothing},
         lock::ReentrantLock=ReentrantLock(),
     )
-        index >= 1 || throw(ArgumentError("a chain index must be at least 1, got $index"))
         new(Int(index), collect(Phase, phases), outcome, lock)
     end
 end

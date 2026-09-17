@@ -1,12 +1,12 @@
-@testset "chain rejects an index the run does not have" begin
+@testset "chain_at rejects an index the run does not have" begin
     r = MCMCProgress.Run("Sampling mymodel", 3)
-    @test_throws "there is no chain 4" chain(r, 4)
-    @test_throws "there is no chain 0" chain(r, 0)
+    @test_throws BoundsError chain_at(r, 4)
+    @test_throws BoundsError chain_at(r, 0)
 end
 
 @testset "a phase is opened, advanced, and closed" begin
     r = MCMCProgress.Run("Sampling mymodel", 1)
-    c = chain(r, 1)
+    c = chain_at(r, 1)
 
     p = open_phase!(c, "Warmup", Determinate(1000))
     @test c.phases == [p]
@@ -25,7 +25,7 @@ end
 
 @testset "advance! sets an absolute position" begin
     r = MCMCProgress.Run("Sampling mymodel", 1)
-    p = open_phase!(chain(r, 1), "Adapting", Counting())
+    p = open_phase!(chain_at(r, 1), "Adapting", Counting())
 
     advance!(p, 5)
     @test p.position == 5
@@ -41,7 +41,7 @@ end
 
 @testset "advance! on a binary phase does nothing" begin
     r = MCMCProgress.Run("Sampling mymodel", 1)
-    c = chain(r, 1)
+    c = chain_at(r, 1)
     p = open_phase!(c, "Finding step size", Binary())
 
     @test advance!(p, 7) === nothing
@@ -55,7 +55,7 @@ end
 
 @testset "reporting rejects what it cannot represent" begin
     r = MCMCProgress.Run("Sampling mymodel", 2)
-    c = chain(r, 1)
+    c = chain_at(r, 1)
 
     d = open_phase!(c, "Warmup", Determinate(1000))
     @test_throws "runs for 1000 iterations, so it cannot advance to 1001" advance!(d, 1001)
@@ -83,7 +83,7 @@ end
 
 @testset "teardown closes open phases and ends chains" begin
     r = MCMCProgress.Run("Sampling mymodel", 2)
-    c1, c2 = chain(r, 1), chain(r, 2)
+    c1, c2 = chain_at(r, 1), chain_at(r, 2)
 
     done = open_phase!(c1, "Finding step size", Binary())
     close_phase!(done)
@@ -110,7 +110,7 @@ end
 
 @testset "a snapshot copies live state without sharing it" begin
     r = MCMCProgress.Run("Sampling mymodel", 2)
-    c = chain(r, 1)
+    c = chain_at(r, 1)
     p = open_phase!(c, "Warmup", Determinate(1000))
     advance!(p, 250)
 
@@ -137,7 +137,7 @@ end
     @test later.chains[1].outcome == finished
 
     # Two phases sharing a name are still told apart by their identity.
-    c2 = chain(r, 2)
+    c2 = chain_at(r, 2)
     a = open_phase!(c2, "Adapting", Counting())
     close_phase!(a)
     b = open_phase!(c2, "Adapting", Counting())
@@ -150,7 +150,7 @@ end
 
 @testset "a held chain lock delays neither advance! nor another chain" begin
     r = MCMCProgress.Run("Sampling mymodel", 2)
-    c1, c2 = chain(r, 1), chain(r, 2)
+    c1, c2 = chain_at(r, 1), chain_at(r, 2)
     p1 = open_phase!(c1, "Warmup", Determinate(10))
     done = Threads.Atomic{Bool}(false)
 
@@ -181,7 +181,7 @@ end
     # Each chain snapshots the whole run periodically while the others write.
     records = map(1:nchains) do j
         Threads.@spawn begin
-            c = chain(r, j)
+            c = chain_at(r, j)
             b = open_phase!(c, "Finding step size", Binary())
             advance!(b, 1)
             close_phase!(b)
