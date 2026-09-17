@@ -1,29 +1,72 @@
 # Instructions for Agents
 
-  - Function names are snake_case (`open_phase!`, `set_backend!`).
-  - A struct, the functions that work on it, its snapshot type, and the snapshot's `show` methods live in the same file.
-  - Tests of a whole run call `MCMCProgress.display_run` with `TEST_PERIOD` (defined in `test/scope.jl`) rather than `progress`, so refreshes come every 20 ms instead of every 100 ms.
-    `MCMCProgress.RecordingBackend` records every backend call, so a test can check what a backend was told.
+  - **Always** use a temporary environment with MCMCProgress dev'd into it to run code.
+    This avoids adding deps into MCMCProgress itself.
+    For example, Term and ProgressLogging are weak dependencies of MCMCProgress and should not be added to `[deps]`.
 
-# Layout
+  - Sometimes you will need to add new dependencies. **ALWAYS DO THIS BY CALLING Pkg.jl**; do NOT
+    edit the `Project.toml` manually as you will often insert the wrong UUID!
 
-  - `src/phase.jl`, `src/chain.jl`, `src/run.jl`: the live state (`Phase`, `Chain`, `Run`), the reporting functions, and the snapshot types.
-  - `src/scope.jl`: `progress`, the refresh task, and the teardown.
-  - `src/backends.jl`: the backend interface and backend selection.
-  - `src/plaintext.jl`: the default backend.
-    `src/term.jl` and `src/progresslogging.jl` define backend types whose methods are in `ext/`.
-  - `examples/gallery.jl`: a runnable demo of each phase kind, run ending and backend.
-    Run `julia --project=examples examples/gallery.jl --help`.
+  - A backend supplied by an extension needs its package loaded first: `using Term` for `TermBackend`, `using ProgressLogging` for `ProgressLoggingBackend`.
 
-# Concurrency
+  - When running `progress` outside the gallery, **always** pass `backend=PlainTextBackend(IOBuffer())` or `backend=MCMCProgress.RecordingBackend()`, so the display does not write to the REPL.
 
   - The locking rules for chains and phases are at the top of `src/phase.jl`.
     Read them before changing `Phase`, `Chain`, or any function that reads or writes their state.
-  - While the body of `progress` runs, only the refresh task calls a backend (see the header of `src/scope.jl`).
-    A backend therefore needs no locking.
+
+# Overview
+
+MCMCProgress displays the progress of MCMC chains, each moving through a sequence of phases.
+
+The core package draws plain text and has no display dependencies.
+Term and ProgressLogging support lives in package extensions under `ext/`.
+
+`examples/` has its own `Project.toml`, with MCMCProgress as a path source.
+Run the gallery with `julia --project=examples examples/gallery.jl --help`.
+
+# Reporting progress
+
+```
+using MCMCProgress
+
+progress(; label="Sampling mymodel", nchains=2) do run
+    @sync for j in 1:2
+        Threads.@spawn begin
+            c = chain(run, j)
+            p = open_phase!(c, "Warmup", Determinate(100))
+            for i in 1:100
+                advance!(p, i)
+            end
+            close_phase!(p)
+        end
+    end
+end
+```
+
+  - `Determinate(total)`, `Counting()` and `Binary()` are the phase kinds.
+  - `advance!` sets an absolute position and takes no lock.
+  - `progress` closes any phase left open and gives every chain an outcome, however the body ends.
 
 # Writing a backend
 
-  - Implement `setup`, `refresh` and `teardown`; `phase_opened` and `phase_closed` are optional.
-    `setup` returns a handle, and every other call receives that handle.
-  - A backend whose methods live in a package extension defines `backend_package`, so selecting it before the package is loaded throws an error naming the package.
+```
+struct MyBackend end
+
+MCMCProgress.setup(::MyBackend, snapshot::RunSnapshot) = handle
+MCMCProgress.refresh(handle, snapshot::RunSnapshot) = nothing
+MCMCProgress.teardown(handle, snapshot::RunSnapshot) = nothing
+```
+
+  - `phase_opened` and `phase_closed` are optional.
+  - While the body of `progress` runs, only the refresh task calls a backend, so a backend needs no locking.
+  - A backend whose methods live in an extension defines `backend_package`.
+
+# Testing
+
+```
+backend = MCMCProgress.RecordingBackend()
+MCMCProgress.display_run(body, "Sampling mymodel", nchains, backend, TEST_PERIOD)
+```
+
+  - `display_run` is `progress` with an explicit refresh period; `TEST_PERIOD` (20 ms, in `test/scope.jl`) keeps tests fast.
+  - `backend.calls` lists every backend call in order.
