@@ -61,7 +61,7 @@ end
 
 function scene_binary(backend)
     progress(; label="A binary phase", nchains=1, backend) do run
-        run_binary!(chain(run, 1), "Connecting", 1.5)
+        run_binary!(chain_at(run, 1), "Connecting", 1.5)
     end
     return nothing
 end
@@ -70,14 +70,14 @@ end
 # every hundred positions.
 function scene_counting(backend)
     progress(; label="A counting phase", nchains=1, backend) do run
-        run_counting!(chain(run, 1), "Warmup", 250; step=0.012)
+        run_counting!(chain_at(run, 1), "Warmup", 250; step=0.012)
     end
     return nothing
 end
 
 function scene_determinate(backend)
     progress(; label="A determinate phase", nchains=1, backend) do run
-        run_determinate!(chain(run, 1), "Sampling", 60)
+        run_determinate!(chain_at(run, 1), "Sampling", 60)
     end
     return nothing
 end
@@ -90,7 +90,7 @@ function scene_fullrun(backend)
     progress(; label="Sampling mymodel", nchains, backend) do run
         @sync for j in 1:nchains
             Threads.@spawn begin
-                c = chain(run, j)
+                c = chain_at(run, j)
                 run_binary!(c, "Connecting", 0.8)
                 run_counting!(c, "Warmup", 25)
                 run_determinate!(c, "Sampling", 50)
@@ -103,8 +103,8 @@ end
 # Two chains, both run to completion: the run ends `finished`.
 function scene_finished(backend)
     progress(; label="A run that finishes", nchains=2, backend) do run
-        run_determinate!(chain(run, 1), "Sampling", 30)
-        run_determinate!(chain(run, 2), "Sampling", 30)
+        run_determinate!(chain_at(run, 1), "Sampling", 30)
+        run_determinate!(chain_at(run, 2), "Sampling", 30)
     end
     return nothing
 end
@@ -113,8 +113,8 @@ end
 # teardown closes chain 2's phase.
 function scene_failed(backend)
     progress(; label="A run that fails", nchains=2, backend) do run
-        run_determinate!(chain(run, 1), "Sampling", 30)
-        p = open_phase!(chain(run, 2), "Sampling", Determinate(30))
+        run_determinate!(chain_at(run, 1), "Sampling", 30)
+        p = open_phase!(chain_at(run, 2), "Sampling", Determinate(30))
         for i in 1:10
             fake_step()
             advance!(p, i)
@@ -128,8 +128,8 @@ end
 # ordinary error, which is what Ctrl-C delivers.
 function scene_interrupted(backend)
     progress(; label="A run that is interrupted", nchains=2, backend) do run
-        run_determinate!(chain(run, 1), "Sampling", 20)
-        p = open_phase!(chain(run, 2), "Sampling", Determinate(30))
+        run_determinate!(chain_at(run, 1), "Sampling", 20)
+        p = open_phase!(chain_at(run, 2), "Sampling", Determinate(30))
         for i in 1:8
             fake_step()
             advance!(p, i)

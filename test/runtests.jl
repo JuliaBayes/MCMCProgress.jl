@@ -12,8 +12,10 @@ using Dates: Dates
     end
 
     @testset "a run numbers its chains from one" begin
-        @test_throws "at least 1" MCMCProgress.Chain(0)
-        @test_throws "at least one chain" MCMCProgress.Run("empty", 0)
+        @test_throws "must be indexed 1:2" MCMCProgress.Run(
+            "Sampling mymodel",
+            [MCMCProgress.Chain(2), MCMCProgress.Chain(1)],
+        )
         r = MCMCProgress.Run("Sampling mymodel", 3)
         @test [ch.index for ch in r.chains] == [1, 2, 3]
     end

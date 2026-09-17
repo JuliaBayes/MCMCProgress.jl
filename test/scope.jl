@@ -86,7 +86,7 @@ middling(xs) = sort(xs)[(length(xs)+1)÷2]
 @testset "progress drives a backend from setup to teardown" begin
     backend = MCMCProgress.RecordingBackend()
     result = progress(; label="Sampling mymodel", nchains=2, backend=backend) do run
-        c = chain(run, 1)
+        c = chain_at(run, 1)
         p = open_phase!(c, "Warmup", Determinate(10))
         advance!(p, 10)
         close_phase!(p)
@@ -124,7 +124,7 @@ end
 @testset "phases are announced to the backend in the order a chain opens them" begin
     backend = MCMCProgress.RecordingBackend()
     quick_run(backend) do run
-        c = chain(run, 1)
+        c = chain_at(run, 1)
         step = open_phase!(c, "Finding step size", Binary())
         close_phase!(step)
         warmup = open_phase!(c, "Warmup", Determinate(4))
@@ -152,7 +152,7 @@ end
 @testset "a phase left open by the body is closed by the teardown" begin
     backend = MCMCProgress.RecordingBackend()
     quick_run(backend) do run
-        open_phase!(chain(run, 1), "Warmup", Determinate(100))
+        open_phase!(chain_at(run, 1), "Warmup", Determinate(100))
         sleep(3 * TEST_PERIOD / 1e9)
         nothing
     end
@@ -178,7 +178,7 @@ end
     caught = nothing
     try
         quick_run(backend; nchains=2) do run
-            open_phase!(chain(run, 1), "Warmup", Determinate(100))
+            open_phase!(chain_at(run, 1), "Warmup", Determinate(100))
             throw(blewup)
         end
     catch exception
@@ -197,7 +197,7 @@ end
 @testset "an InterruptException ends the chains as interrupted" begin
     backend = MCMCProgress.RecordingBackend()
     @test_throws InterruptException quick_run(backend; nchains=3) do run
-        open_phase!(chain(run, 2), "Warmup", Determinate(100))
+        open_phase!(chain_at(run, 2), "Warmup", Determinate(100))
         throw(InterruptException())
     end
 
@@ -212,7 +212,7 @@ end
     caught = nothing
     try
         quick_run(backend; nchains=2) do run
-            MCMCProgress.set_outcome!(chain(run, 1), finished)
+            MCMCProgress.set_outcome!(chain_at(run, 1), finished)
             error("the sampler blew up")
         end
     catch exception
@@ -255,7 +255,7 @@ end
     @testset "a backend that cannot close a phase" begin
         backend = FailingBackend(:phase_closed)
         @test_throws "this backend cannot close a phase" quick_run(backend) do run
-            open_phase!(chain(run, 1), "Warmup", Determinate(100))
+            open_phase!(chain_at(run, 1), "Warmup", Determinate(100))
             nothing
         end
         @test :teardown in backend.calls
@@ -399,7 +399,7 @@ end
     quick_run(backend; nchains) do run
         @sync for j in 1:nchains
             Threads.@spawn begin
-                c = chain(run, j)
+                c = chain_at(run, j)
                 step = open_phase!(c, "Finding step size", Binary())
                 sleep(TEST_PERIOD / 1e9)
                 close_phase!(step)

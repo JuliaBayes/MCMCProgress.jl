@@ -9,7 +9,7 @@ capture_progress_logs(f) =
             nchains=1,
             backend=MCMCProgress.ProgressLoggingBackend(),
         ) do run
-            p = open_phase!(chain(run, 1), "Warmup", Determinate(2))
+            p = open_phase!(chain_at(run, 1), "Warmup", Determinate(2))
             advance!(p, 1)
             advance!(p, 2)
             close_phase!(p)
@@ -120,9 +120,9 @@ end
                 MCMCProgress.ProgressLoggingBackend(),
                 MCMCProgress.REFRESH_PERIOD,
             ) do run
-                p1 = open_phase!(chain(run, 1), "Warmup", Determinate(10))
+                p1 = open_phase!(chain_at(run, 1), "Warmup", Determinate(10))
                 advance!(p1, 3)
-                open_phase!(chain(run, 2), "Warmup", Counting())  # left open when the error hits
+                open_phase!(chain_at(run, 2), "Warmup", Counting())  # left open when the error hits
                 error("the sampler blew up")
             end
         catch exception

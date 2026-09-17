@@ -3,7 +3,7 @@ module MCMCProgress
 export PhaseKind, Determinate, Counting, Binary
 export Outcome, finished, failed, interrupted
 export RunSnapshot, ChainSnapshot, PhaseSnapshot
-export progress, chain, open_phase!, advance!, close_phase!
+export progress, chain_at, open_phase!, advance!, close_phase!
 export setup, phase_opened, phase_closed, refresh, teardown
 export set_backend!, PlainTextBackend, backend_package
 export ProgressLoggingBackend

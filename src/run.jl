@@ -10,8 +10,15 @@ struct Run
     chains::Vector{Chain}
 
     function Run(label::AbstractString, chains::AbstractVector{Chain})
-        isempty(chains) && throw(ArgumentError("a run must have at least one chain"))
-        new(String(label), collect(Chain, chains))
+        chains = collect(Chain, chains)
+        for (position, c) in pairs(chains)
+            c.index == position || throw(
+                ArgumentError(
+                    "chain at position $position has index $(c.index); a run's chains must be indexed 1:$(length(chains))",
+                ),
+            )
+        end
+        new(String(label), chains)
     end
 end
 
@@ -24,22 +31,16 @@ fixed for the life of the run.
 Run(label::AbstractString, nchains::Integer) = Run(label, [Chain(i) for i in 1:nchains])
 
 """
-    chain(run::Run, index::Integer) -> Chain
+    chain_at(run::Run, index::Integer) -> Chain
 
 The chain at `index` within `run`. A run's chains are fixed when it is created,
 so this lookup takes no lock.
 
 ```julia
-c = chain(run, j)
+c = chain_at(run, j)
 ```
 """
-function chain(run::Run, index::Integer)
-    chains = run.chains
-    checkbounds(Bool, chains, index) || throw(
-        ArgumentError("this run has $(length(chains)) chains, so there is no chain $index"),
-    )
-    return chains[index]
-end
+chain_at(run::Run, index::Integer) = run.chains[index]
 
 """
     RunSnapshot

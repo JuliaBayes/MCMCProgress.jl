@@ -148,7 +148,7 @@ the task running `f`.
 progress(; label="Sampling mymodel", nchains=4) do run
     @sync for j in 1:4
         Threads.@spawn begin
-            c = chain(run, j)
+            c = chain_at(run, j)
             p = open_phase!(c, "Warmup", Determinate(1000))
             for i in 1:1000
                 warmup_step()
