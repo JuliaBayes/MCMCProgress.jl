@@ -70,6 +70,62 @@ function MCMCProgress.teardown(backend::FailingBackend, ::RunSnapshot)
     return nothing
 end
 
+"""
+    SlowRefreshBackend(pause)
+
+Makes every refresh sleep for `pause` seconds. `refreshing` is set while a refresh
+sleeps, `inside` counts the backend calls in progress, and `overlapped` is set if
+a call starts while another is in progress. `calls` records the name of every
+call and is guarded by `lock`.
+"""
+struct SlowRefreshBackend
+    pause::Float64
+    refreshing::Threads.Atomic{Bool}
+    inside::Threads.Atomic{Int}
+    overlapped::Threads.Atomic{Bool}
+    calls::Vector{Symbol}
+    lock::ReentrantLock
+end
+
+SlowRefreshBackend(pause::Real) = SlowRefreshBackend(
+    Float64(pause),
+    Threads.Atomic{Bool}(false),
+    Threads.Atomic{Int}(0),
+    Threads.Atomic{Bool}(false),
+    Symbol[],
+    ReentrantLock(),
+)
+
+function occupy(f, backend::SlowRefreshBackend, name::Symbol)
+    Threads.atomic_add!(backend.inside, 1) > 0 && (backend.overlapped[] = true)
+    try
+        lock(() -> push!(backend.calls, name), backend.lock)
+        f()
+    finally
+        Threads.atomic_sub!(backend.inside, 1)
+    end
+    return nothing
+end
+
+MCMCProgress.setup(backend::SlowRefreshBackend, ::RunSnapshot) = backend
+
+function MCMCProgress.refresh(backend::SlowRefreshBackend, ::RunSnapshot)
+    occupy(backend, :refresh) do
+        backend.refreshing[] = true
+        sleep(backend.pause)
+        backend.refreshing[] = false
+    end
+end
+
+MCMCProgress.phase_opened(backend::SlowRefreshBackend, ::Integer, ::PhaseSnapshot) =
+    occupy(() -> nothing, backend, :phase_opened)
+
+MCMCProgress.phase_closed(backend::SlowRefreshBackend, ::Integer, ::PhaseSnapshot) =
+    occupy(() -> nothing, backend, :phase_closed)
+
+MCMCProgress.teardown(backend::SlowRefreshBackend, ::RunSnapshot) =
+    occupy(() -> nothing, backend, :teardown)
+
 # 20 ms, so a body lasting 0.1 s sees several refreshes.
 const TEST_PERIOD = UInt64(20_000_000)
 
@@ -298,6 +354,75 @@ end
 
     @test caught === blewup
     @test :teardown in backend.calls
+end
+
+@testset "a rethrown teardown failure keeps the backtrace it was raised with" begin
+    backend = FailingBackend(:teardown)
+    frames = nothing
+    try
+        quick_run(run -> nothing, backend)
+    catch
+        frames = stacktrace(catch_backtrace())
+    end
+    @test any(frame -> frame.func === :teardown, frames)
+end
+
+@testset "a refresh failure is logged at once and the body runs to completion" begin
+    backend = FailingBackend(:refresh)
+    logger = Test.TestLogger()
+    logged_while_body_ran = false
+    body_completed = false
+    caught = nothing
+
+    Logging.with_logger(logger) do
+        try
+            quick_run(backend) do run
+                logged = () -> lock(() -> !isempty(logger.logs), logger.lock)
+                logged_while_body_ran = timedwait(logged, 10.0) === :ok
+                body_completed = true
+            end
+        catch exception
+            caught = exception
+        end
+    end
+
+    @test logged_while_body_ran
+    @test body_completed
+    @test first(logger.logs).level == Logging.Error
+    @test caught isa TaskFailedException
+    @test occursin("this backend cannot refresh", sprint(showerror, caught))
+end
+
+@testset "an interrupt while teardown waits for a refresh never overlaps backend calls" begin
+    backend = SlowRefreshBackend(1.0)
+    body_started = Threads.Atomic{Bool}(false)
+
+    @test_logs (:error, "A progress display failed while tearing the backend down.") match_mode =
+        :any begin
+        runner = @async quick_run(backend) do run
+            open_phase!(chain_at(run, 1), "Warmup", Determinate(100))
+            body_started[] = true
+            sleep(60)
+        end
+
+        @test timedwait(() -> body_started[] && backend.refreshing[], 10.0) === :ok
+        schedule(runner, InterruptException(); error=true)  # ends the body
+        sleep(0.1)  # the run is now waiting for the refresh to finish
+        @test backend.refreshing[]
+        schedule(runner, InterruptException(); error=true)  # lands in that wait
+
+        caught = try
+            wait(runner)
+        catch exception
+            exception
+        end
+        @test caught isa TaskFailedException
+        @test caught.task.exception isa InterruptException
+    end
+
+    @test timedwait(() -> !backend.refreshing[] && backend.inside[] == 0, 10.0) === :ok
+    @test !backend.overlapped[]
+    @test :teardown ∉ lock(() -> copy(backend.calls), backend.lock)
 end
 
 @testset "the refresh task refreshes while the body runs" begin

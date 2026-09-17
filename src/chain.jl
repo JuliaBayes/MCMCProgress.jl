@@ -16,10 +16,17 @@ mutable struct Chain
 
     function Chain(
         index::Integer,
-        phases::AbstractVector{Phase},
+        phases::AbstractVector{<:Phase},
         outcome::Union{Outcome,Nothing},
         lock::ReentrantLock=ReentrantLock(),
     )
+        for p in phases
+            p.lock === lock || throw(
+                ArgumentError(
+                    "the phase \"$(p.name)\" holds a different lock from chain $index; a chain and its phases share one lock",
+                ),
+            )
+        end
         new(Int(index), collect(Phase, phases), outcome, lock)
     end
 end

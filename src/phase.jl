@@ -87,6 +87,11 @@ iteration of a sampler.
 Throws if a `Determinate` phase would advance past its total, if the position is
 negative, or if the phase is closed. On a `Binary` phase, `advance!` does
 nothing and never throws.
+
+The closed check is best effort: a report racing with another task closing the
+phase, as the run's teardown does, may store one more position after the phase
+has closed. That position has passed the same range check as any other, so it is
+harmless, but no task can rely on the check to synchronise with the closing one.
 """
 advance!(::Phase{Binary}, ::Integer) = nothing
 

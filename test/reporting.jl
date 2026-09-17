@@ -4,6 +4,24 @@
     @test_throws BoundsError chain_at(r, 0)
 end
 
+@testset "a chain is built only from phases that share its lock" begin
+    shared = ReentrantLock()
+    phases = [MCMCProgress.Phase("Warmup", Determinate(10), shared)]
+    @test phases isa Vector{MCMCProgress.Phase{Determinate}}  # concretely typed
+
+    c = MCMCProgress.Chain(1, phases, nothing, shared)
+    @test c.phases == phases
+    @test c.phases isa Vector{MCMCProgress.Phase}
+
+    foreign = MCMCProgress.Phase("Sampling", Counting())
+    @test_throws "the phase \"Sampling\" holds a different lock from chain 1" MCMCProgress.Chain(
+        1,
+        [foreign],
+        nothing,
+        shared,
+    )
+end
+
 @testset "a phase is opened, advanced, and closed" begin
     r = MCMCProgress.Run("Sampling mymodel", 1)
     c = chain_at(r, 1)
@@ -208,11 +226,8 @@ end
     # Only snapshots with two chains mid-phase test concurrent reads; report how many.
     reporting(cs) = any(ps -> ps.closed === nothing && 0 < ps.position < total, cs.phases)
     overlapping = count(s -> count(reporting, s.chains) >= 2, seen)
-    if overlapping == 0
-        @warn "none of the $(length(seen)) snapshots caught two chains reporting at once, so on $(Threads.nthreads()) thread(s) this testset saw chains take turns rather than overlap"
-    else
-        @info "$overlapping of $(length(seen)) snapshots caught two or more chains reporting at once across $(Threads.nthreads()) threads"
-    end
+    @info "$overlapping of $(length(seen)) snapshots caught two or more chains reporting at once across $(Threads.nthreads()) threads"
+    @test overlapping > 0
 
     # A snapshot shows a prefix of the expected phases, closed ones at their final position.
     function consistent(s::RunSnapshot)

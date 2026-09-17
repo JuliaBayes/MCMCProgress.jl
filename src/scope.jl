@@ -87,6 +87,9 @@ end
 # nanoseconds until `stop` is set. The flag is read again after the wait, so a
 # run that ends while this task sleeps draws nothing more; the teardown draws the
 # final state.
+#
+# A failure is logged as soon as it happens, because nobody waits on this task
+# until the run ends, and then rethrown so that the run reports it again there.
 function refresh_loop(
     run::Run,
     handle,
@@ -94,15 +97,21 @@ function refresh_loop(
     period::UInt64,
     stop::Threads.Atomic{Bool},
 )
-    deadline = time_ns() + period
-    while !stop[]
-        now = time_ns()
-        now < deadline && sleep((deadline - now) / 1e9)
-        stop[] && break
-        state = snapshot(run)
-        announce!(handle, state, announced)
-        refresh(handle, state)
-        deadline = next_deadline(deadline, period, time_ns())
+    try
+        deadline = time_ns() + period
+        while !stop[]
+            now = time_ns()
+            now < deadline && sleep((deadline - now) / 1e9)
+            stop[] && break
+            state = snapshot(run)
+            announce!(handle, state, announced)
+            refresh(handle, state)
+            deadline = next_deadline(deadline, period, time_ns())
+        end
+    catch exception
+        @error "A progress display failed while refreshing; sampling continues without a display." exception =
+            (exception, catch_backtrace())
+        rethrow()
     end
     return nothing
 end
@@ -141,8 +150,24 @@ However `f` ends, any phase left open is closed, every chain still running is
 given an outcome, the refresh task stops, and the backend's [`teardown`](@ref)
 is called, which is where a terminal display restores the cursor. An exception
 from `f` is rethrown unchanged and ends the chains still running as `failed`, or
-as `interrupted` for an `InterruptException`, which is what Ctrl-C delivers to
-the task running `f`.
+as `interrupted` for an `InterruptException`.
+
+If the backend throws while refreshing, the error is logged at once and the
+display stops, but `f` keeps running; the failure is thrown again when `f`
+returns.
+
+`f` must wait for every task it spawns before returning, as `@sync` does below. A
+task still reporting after `progress` returns finds its phase closed, and its
+next [`advance!`](@ref) throws an error that nothing observes.
+
+Ctrl-C delivers an `InterruptException` to the main task. It reaches `f` only when
+`progress` is called from the main task, as it is at the REPL. It does not stop
+the tasks `f` spawned: when the interrupt leaves a `@sync` block, those tasks keep
+running, and the next report each one makes throws, which is what stops them.
+When the session has interactive threads, the refresh task runs on that pool,
+which includes the main thread, so an interrupt can occasionally reach the
+refresh task instead of `f`; it then appears as a display failure and `f` keeps
+running.
 
 ```julia
 progress(; label="Sampling mymodel", nchains=4) do run
@@ -194,7 +219,12 @@ left half torn down.
 
 `cause` is the exception that ended the run's body, or `nothing` if the body
 returned normally. With a `cause`, which the caller rethrows, every failure here
-is logged. Without one, the first failure is thrown and any later one is logged.
+is logged. Without one, the first failure is rethrown with its backtrace once the
+later steps have run, and any later failure is logged.
+
+The backend is called only once the refresh task has finished. An interrupt that
+lands while waiting for it leaves it running; the backend is then not called
+again, and each call skipped is a failure in its own right.
 """
 function end_run!(
     run::Run,
@@ -205,64 +235,59 @@ function end_run!(
     outcome::Outcome,
     cause,
 )
-    problems = Any[]
+    steps = [
+        "closing the phases the run left open" =>
+            () -> foreach(close_open_phases!, run.chains),
+        "recording how the chains ended" =>
+            () -> foreach(run.chains) do c
+                # One lock covers the read and the write, so a chain that recorded
+                # its own outcome keeps it.
+                lock(c.lock) do
+                    c.outcome === nothing && set_outcome!(c, outcome)
+                end
+            end,
+        "stopping the refresh task" => () -> begin
+            stop[] = true
+            # Rethrows any exception that ended the refresh task.
+            wait(task)
+        end,
+        # Every chain has ended and the refresh task has stopped, so the two
+        # snapshots below show the same state.
+        "announcing the phases that closed as the run ended" =>
+            () -> begin
+                require_stopped(task)
+                announce!(handle, snapshot(run), announced)
+            end,
+        "tearing the backend down" => () -> begin
+            require_stopped(task)
+            teardown(handle, snapshot(run))
+        end,
+    ]
+    run_teardown_steps(steps, cause)
+    return nothing
+end
 
-    attempt!(problems, "closing the phases the run left open") do
-        for c in run.chains
-            close_open_phases!(c)
-        end
-    end
+function require_stopped(task::Task)
+    istaskdone(task) ||
+        error("the refresh task was still running, so the backend was not called")
+    return nothing
+end
 
-    attempt!(problems, "recording how the chains ended") do
-        for c in run.chains
-            # One lock covers the read and the write, so a chain that recorded
-            # its own outcome keeps it.
-            lock(c.lock) do
-                c.outcome === nothing && set_outcome!(c, outcome)
+# Run every step in order, even after one throws. Without a `cause`, the first
+# failure is rethrown from its own `catch` block, which keeps its backtrace, after
+# the later steps have run; every other failure is logged.
+function run_teardown_steps(steps::AbstractVector{<:Pair}, cause)
+    for (i, (what, step)) in pairs(steps)
+        try
+            step()
+        catch exception
+            if cause === nothing
+                run_teardown_steps(steps[(i+1):end], exception)
+                rethrow()
             end
+            @error "A progress display failed while $what." exception =
+                (exception, catch_backtrace())
         end
     end
-
-    attempt!(problems, "stopping the refresh task") do
-        stop[] = true
-        # Waiting ensures no refresh runs after this point, and rethrows any
-        # exception that ended the refresh task.
-        wait(task)
-    end
-
-    # Every chain has ended and the refresh task has stopped, so the two
-    # snapshots below show the same state.
-    attempt!(problems, "announcing the phases that closed as the run ended") do
-        announce!(handle, snapshot(run), announced)
-    end
-
-    attempt!(problems, "tearing the backend down") do
-        teardown(handle, snapshot(run))
-    end
-
-    report!(problems, cause)
-    return nothing
-end
-
-# Run one step of the teardown, recording an exception it raises so that the
-# steps after it still run.
-function attempt!(step, problems::Vector, what::AbstractString)
-    try
-        step()
-    catch exception
-        push!(problems, (; what, exception, backtrace=catch_backtrace()))
-    end
-    return nothing
-end
-
-# Log every problem from the teardown except one that is about to be thrown.
-function report!(problems::Vector, cause)
-    logged = cause === nothing ? firstindex(problems) + 1 : firstindex(problems)
-    for i in logged:lastindex(problems)
-        problem = problems[i]
-        @error "A progress display failed while $(problem.what)." exception =
-            (problem.exception, problem.backtrace)
-    end
-    cause === nothing && !isempty(problems) && throw(problems[begin].exception)
     return nothing
 end
