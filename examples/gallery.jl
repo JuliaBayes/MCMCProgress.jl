@@ -4,9 +4,8 @@
 # Every scene runs through whichever backend is asked for on the command line,
 # so the three backends can be compared against each other.
 #
-# The sampler each scene drives is fake: it sleeps for a small, slightly
-# randomised interval per step rather than doing any work, which holds every
-# scene to a few seconds on any machine.
+# The sampler is fake: it sleeps for a short, randomised interval per step, so
+# every scene takes a few seconds.
 #
 # Run `julia --project=examples examples/gallery.jl --help` for usage.
 
@@ -20,42 +19,41 @@ using Logging: with_logger
 
 const STEP_SECONDS = 0.03
 
-# One step of fake sampling work: long enough to see, short enough that a
-# hundred of them still take a couple of seconds.
-fakestep(seconds::Real=STEP_SECONDS) = sleep(seconds * (0.7 + 0.6 * rand()))
+# Sleep for `seconds`, varied randomly by up to 30% either way.
+fake_step(seconds::Real=STEP_SECONDS) = sleep(seconds * (0.7 + 0.6 * rand()))
 
 # Run a determinate phase called `name` on chain `c` to completion, from
 # position 0 up to `total`.
-function rundeterminate!(c, name::AbstractString, total::Integer; step=STEP_SECONDS)
-    p = openphase!(c, name, Determinate(total))
+function run_determinate!(c, name::AbstractString, total::Integer; step=STEP_SECONDS)
+    p = open_phase!(c, name, Determinate(total))
     for i in 1:total
-        fakestep(step)
+        fake_step(step)
         advance!(p, i)
     end
-    closephase!(p)
+    close_phase!(p)
     return nothing
 end
 
-# Run a counting phase called `name` on chain `c` for `n` steps. `n` is how
-# far this call happens to take the count, not a total the phase knows about.
-function runcounting!(c, name::AbstractString, n::Integer; step=STEP_SECONDS)
-    p = openphase!(c, name, Counting())
+# Run a counting phase called `name` on chain `c` for `n` steps. The phase is
+# not told `n`.
+function run_counting!(c, name::AbstractString, n::Integer; step=STEP_SECONDS)
+    p = open_phase!(c, name, Counting())
     for i in 1:n
-        fakestep(step)
+        fake_step(step)
         advance!(p, i)
     end
-    closephase!(p)
+    close_phase!(p)
     return nothing
 end
 
 # Run a binary phase called `name` on chain `c` for about `seconds` before
 # closing it. A binary phase has no position, so there is nothing to advance.
-function runbinary!(c, name::AbstractString, seconds::Real; step=STEP_SECONDS)
-    p = openphase!(c, name, Binary())
+function run_binary!(c, name::AbstractString, seconds::Real; step=STEP_SECONDS)
+    p = open_phase!(c, name, Binary())
     for _ in 1:max(1, round(Int, seconds/step))
-        fakestep(step)
+        fake_step(step)
     end
-    closephase!(p)
+    close_phase!(p)
     return nothing
 end
 
@@ -63,40 +61,39 @@ end
 
 function scene_binary(backend)
     progress(; label="A binary phase", nchains=1, backend) do run
-        runbinary!(chain(run, 1), "Connecting", 1.5)
+        run_binary!(chain(run, 1), "Connecting", 1.5)
     end
     return nothing
 end
 
-# The count runs past 200 because the plain-text backend writes a counting
-# phase's line once every hundred positions; a phase that stops short of a
-# hundred would show only its first line and its last.
+# 250 steps, because the plain-text backend writes a counting phase's line only
+# every hundred positions.
 function scene_counting(backend)
     progress(; label="A counting phase", nchains=1, backend) do run
-        runcounting!(chain(run, 1), "Warmup", 250; step=0.012)
+        run_counting!(chain(run, 1), "Warmup", 250; step=0.012)
     end
     return nothing
 end
 
 function scene_determinate(backend)
     progress(; label="A determinate phase", nchains=1, backend) do run
-        rundeterminate!(chain(run, 1), "Sampling", 60)
+        run_determinate!(chain(run, 1), "Sampling", 60)
     end
     return nothing
 end
 
 # Several chains at once, each moving through a binary, a counting, then a
-# determinate phase in turn: connecting, then an adaptive warmup of unknown
-# length, then a fixed number of draws. This is the shape of a real run.
+# determinate phase: connecting, an adaptive warmup of unknown length, then a
+# fixed number of draws.
 function scene_fullrun(backend)
     nchains = 3
     progress(; label="Sampling mymodel", nchains, backend) do run
         @sync for j in 1:nchains
             Threads.@spawn begin
                 c = chain(run, j)
-                runbinary!(c, "Connecting", 0.8)
-                runcounting!(c, "Warmup", 25)
-                rundeterminate!(c, "Sampling", 50)
+                run_binary!(c, "Connecting", 0.8)
+                run_counting!(c, "Warmup", 25)
+                run_determinate!(c, "Sampling", 50)
             end
         end
     end
@@ -106,21 +103,20 @@ end
 # Two chains, both run to completion: the run ends `finished`.
 function scene_finished(backend)
     progress(; label="A run that finishes", nchains=2, backend) do run
-        rundeterminate!(chain(run, 1), "Sampling", 30)
-        rundeterminate!(chain(run, 2), "Sampling", 30)
+        run_determinate!(chain(run, 1), "Sampling", 30)
+        run_determinate!(chain(run, 2), "Sampling", 30)
     end
     return nothing
 end
 
-# Chain 1 finishes its phase; chain 2 is left mid-phase when an ordinary
-# exception ends the run's body, so both chains end `failed` and the run's
-# teardown is what closes chain 2's open phase.
+# Chain 2 is mid-phase when the body throws, so both chains end `failed` and the
+# teardown closes chain 2's phase.
 function scene_failed(backend)
     progress(; label="A run that fails", nchains=2, backend) do run
-        rundeterminate!(chain(run, 1), "Sampling", 30)
-        p = openphase!(chain(run, 2), "Sampling", Determinate(30))
+        run_determinate!(chain(run, 1), "Sampling", 30)
+        p = open_phase!(chain(run, 2), "Sampling", Determinate(30))
         for i in 1:10
-            fakestep()
+            fake_step()
             advance!(p, i)
         end
         error("the sampler encountered a numerical problem")
@@ -132,10 +128,10 @@ end
 # ordinary error, which is what Ctrl-C delivers.
 function scene_interrupted(backend)
     progress(; label="A run that is interrupted", nchains=2, backend) do run
-        rundeterminate!(chain(run, 1), "Sampling", 20)
-        p = openphase!(chain(run, 2), "Sampling", Determinate(30))
+        run_determinate!(chain(run, 1), "Sampling", 20)
+        p = open_phase!(chain(run, 2), "Sampling", Determinate(30))
         for i in 1:8
-            fakestep()
+            fake_step()
             advance!(p, i)
         end
         throw(InterruptException())
@@ -145,20 +141,15 @@ end
 
 const SPINNER_STYLES = (:dot, :circle, :toggle, :toggle2, :bar, :greek)
 
-# Every spinner style Term ships, running side by side. A run's `TermBackend`
-# draws every bar from one column configuration, so several spinner styles at
-# once cannot be shown through the backend interface; this is the one scene that
-# talks to Term.Progress directly.
+# Term's spinner styles side by side. `TermBackend` uses one column
+# configuration for every bar, so this scene calls `Term.Progress` directly.
 function scene_spinners(_backend)
     pbar = Term.Progress.ProgressBar(; columns=:spinner, title="Term's spinner styles")
     Term.Progress.start!(pbar)
     template = copy(pbar.columns)
     jobs = map(SPINNER_STYLES) do style
-        # A freshly added job starts out holding the very array `pbar.columns`
-        # points to, not a copy of it, and starting a job with no total
-        # mutates that array in place. Resetting `pbar.columns` to a fresh
-        # copy before every `addjob!` call keeps one job's columns from
-        # leaking into the next.
+        # A new job shares `pbar.columns`, which starting a job with no total
+        # mutates, so each job is added with a fresh copy.
         pbar.columns = copy(template)
         Term.Progress.addjob!(
             pbar;
@@ -249,7 +240,7 @@ const SCENES = [
     ),
 ]
 
-function findscene(name::AbstractString)
+function find_scene(name::AbstractString)
     i = findfirst(s -> s.name == name, SCENES)
     i === nothing && throw(
         ArgumentError(
@@ -261,7 +252,7 @@ end
 
 # The backend name a scene actually runs with: `scene`'s own fixed backend if
 # it has one, otherwise `requested`, falling back to plain text.
-function resolvebackendname(scene::Scene, requested::Union{AbstractString,Nothing})
+function resolve_backend_name(scene::Scene, requested::Union{AbstractString,Nothing})
     if scene.fixedbackend !== nothing
         requested === nothing ||
             requested == scene.fixedbackend ||
@@ -282,11 +273,9 @@ function resolvebackendname(scene::Scene, requested::Union{AbstractString,Nothin
 end
 
 # Build the backend named `name` and call `f` with it. The ProgressLogging
-# backend emits log records and draws nothing itself, so it shows up only once a
-# logger that understands those records is installed; `TerminalLogger` from
-# TerminalLoggers.jl is installed here for the duration of the call, and the
-# logger that was active before is restored after it.
-function withbackend(f, name::AbstractString)
+# backend only emits log records, so a `TerminalLogger` is installed for the
+# duration of the call to display them.
+function with_backend(f, name::AbstractString)
     if name == "plaintext"
         f(PlainTextBackend())
     elseif name == "term"
@@ -305,14 +294,14 @@ function withbackend(f, name::AbstractString)
     return nothing
 end
 
-function runscene(scene::Scene, requested::Union{AbstractString,Nothing})
-    backendname = resolvebackendname(scene, requested)
+function run_scene(scene::Scene, requested::Union{AbstractString,Nothing})
+    backendname = resolve_backend_name(scene, requested)
     println()
     println("=== ", scene.name, " (", backendname, ") ===")
     println(scene.summary)
     println()
     try
-        withbackend(scene.run, backendname)
+        with_backend(scene.run, backendname)
         scene.expect === nothing || error(
             "scene \"$(scene.name)\" was meant to end by raising $(scene.expect), but it returned normally",
         )
@@ -333,14 +322,12 @@ function runscene(scene::Scene, requested::Union{AbstractString,Nothing})
     return nothing
 end
 
-# Every scene that takes a backend, run once each through `requested` (or
-# plain text if that is `nothing`). Term's spinner styles are their own scene,
-# reached with `--scene spinners`, since they have no plain-text or
-# ProgressLogging rendering to compare against.
-function runall(requested::Union{AbstractString,Nothing})
+# Run every scene that takes a backend through `requested` (plain text if
+# `nothing`). The spinner scene only runs with `--scene spinners`.
+function run_all(requested::Union{AbstractString,Nothing})
     for scene in SCENES
         scene.fixedbackend === nothing || continue
-        runscene(scene, requested)
+        run_scene(scene, requested)
     end
     println()
     println("Term's spinner styles are their own scene: --scene spinners")
@@ -358,7 +345,7 @@ mutable struct Options
 end
 Options() = Options(false, false, false, nothing, nothing)
 
-function parseargs(args)
+function parse_args(args)
     opts = Options()
     i = firstindex(args)
     while i <= lastindex(args)
@@ -393,7 +380,7 @@ function parseargs(args)
     return opts
 end
 
-function printlisting()
+function print_listing()
     println("Scenes:")
     for scene in SCENES
         backends =
@@ -406,7 +393,7 @@ function printlisting()
     return nothing
 end
 
-function printusage()
+function print_usage()
     println("A runnable showcase of MCMCProgress's phase kinds, endings, and backends.")
     println()
     println("Usage:")
@@ -422,26 +409,26 @@ function printusage()
     println("  --list           print the scene and backend list below, then exit")
     println("  --help, -h       print this message and exit")
     println()
-    printlisting()
+    print_listing()
     return nothing
 end
 
 function main(args=ARGS)
-    opts = parseargs(args)
+    opts = parse_args(args)
     if opts.help || isempty(args)
-        printusage()
+        print_usage()
         return nothing
     elseif opts.list
-        printlisting()
+        print_listing()
         return nothing
     end
     opts.all &&
         opts.scene !== nothing &&
         throw(ArgumentError("pass either --scene or --all, not both"))
     if opts.all
-        runall(opts.backend)
+        run_all(opts.backend)
     elseif opts.scene !== nothing
-        runscene(findscene(opts.scene), opts.backend)
+        run_scene(find_scene(opts.scene), opts.backend)
     else
         throw(
             ArgumentError("pass --scene NAME, --all, or --list; run with --help for usage"),

@@ -1,6 +1,4 @@
-# ProgressLogging's own level sits between Debug and Info, so a plain
-# `collect_test_logs` call (whose default `min_level` is Info) would miss
-# every record this backend emits unless `min_level` is lowered to it.
+# `ProgressLevel` is below Info, the default `min_level` of `collect_test_logs`.
 capture_progress_logs(f) =
     Test.collect_test_logs(f; min_level=ProgressLogging.ProgressLevel)
 
@@ -11,10 +9,10 @@ capture_progress_logs(f) =
             nchains=1,
             backend=MCMCProgress.ProgressLoggingBackend(),
         ) do run
-            p = openphase!(chain(run, 1), "Warmup", Determinate(2))
+            p = open_phase!(chain(run, 1), "Warmup", Determinate(2))
             advance!(p, 1)
             advance!(p, 2)
-            closephase!(p)
+            close_phase!(p)
         end
     end
     @test !isempty(logs)
@@ -116,15 +114,15 @@ end
     caught = nothing
     logs, _ = capture_progress_logs() do
         try
-            MCMCProgress.displayrun(
+            MCMCProgress.display_run(
                 "Sampling mymodel",
                 2,
                 MCMCProgress.ProgressLoggingBackend(),
                 MCMCProgress.REFRESH_PERIOD,
             ) do run
-                p1 = openphase!(chain(run, 1), "Warmup", Determinate(10))
+                p1 = open_phase!(chain(run, 1), "Warmup", Determinate(10))
                 advance!(p1, 3)
-                openphase!(chain(run, 2), "Warmup", Counting())  # left open when the error hits
+                open_phase!(chain(run, 2), "Warmup", Counting())  # left open when the error hits
                 error("the sampler blew up")
             end
         catch exception

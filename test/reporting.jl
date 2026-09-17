@@ -8,7 +8,7 @@ end
     r = MCMCProgress.Run("Sampling mymodel", 1)
     c = chain(r, 1)
 
-    p = openphase!(c, "Warmup", Determinate(1000))
+    p = open_phase!(c, "Warmup", Determinate(1000))
     @test c.phases == [p]
     @test isopen(p)
     @test p.closed === nothing
@@ -16,7 +16,7 @@ end
     advance!(p, 500)
     @test p.position == 500
 
-    closephase!(p)
+    close_phase!(p)
     @test !isopen(p)
     @test p.closed isa UInt64
     @test p.closed >= p.opened
@@ -25,7 +25,7 @@ end
 
 @testset "advance! sets an absolute position" begin
     r = MCMCProgress.Run("Sampling mymodel", 1)
-    p = openphase!(chain(r, 1), "Adapting", Counting())
+    p = open_phase!(chain(r, 1), "Adapting", Counting())
 
     advance!(p, 5)
     @test p.position == 5
@@ -42,14 +42,13 @@ end
 @testset "advance! on a binary phase does nothing" begin
     r = MCMCProgress.Run("Sampling mymodel", 1)
     c = chain(r, 1)
-    p = openphase!(c, "Finding step size", Binary())
+    p = open_phase!(c, "Finding step size", Binary())
 
     @test advance!(p, 7) === nothing
     @test p.position == 0
-    # A binary phase has no position to get wrong, so even a nonsensical
-    # report is accepted and discarded.
+    # Even a negative position is ignored.
     @test advance!(p, -1) === nothing
-    closephase!(p)
+    close_phase!(p)
     @test advance!(p, 7) === nothing
     @test p.position == 0
 end
@@ -58,37 +57,41 @@ end
     r = MCMCProgress.Run("Sampling mymodel", 2)
     c = chain(r, 1)
 
-    d = openphase!(c, "Warmup", Determinate(1000))
+    d = open_phase!(c, "Warmup", Determinate(1000))
     @test_throws "runs for 1000 iterations, so it cannot advance to 1001" advance!(d, 1001)
     @test_throws "runs for 1000 iterations, so it cannot advance to -1" advance!(d, -1)
     @test d.position == 0
 
-    @test_throws "still has the phase \"Warmup\" open" openphase!(c, "Sampling", Counting())
+    @test_throws "still has the phase \"Warmup\" open" open_phase!(
+        c,
+        "Sampling",
+        Counting(),
+    )
 
-    closephase!(d)
+    close_phase!(d)
     @test_throws "is closed, so it cannot advance to 5" advance!(d, 5)
-    @test_throws "has already been closed" closephase!(d)
+    @test_throws "has already been closed" close_phase!(d)
 
-    n = openphase!(c, "Adapting", Counting())
+    n = open_phase!(c, "Adapting", Counting())
     @test_throws "a position cannot be negative" advance!(n, -1)
-    closephase!(n)
+    close_phase!(n)
 
-    MCMCProgress.setoutcome!(c, finished)
-    @test_throws "has already ended as finished" openphase!(c, "Sampling", Counting())
-    @test_throws "has already ended as finished" MCMCProgress.setoutcome!(c, failed)
+    MCMCProgress.set_outcome!(c, finished)
+    @test_throws "has already ended as finished" open_phase!(c, "Sampling", Counting())
+    @test_throws "has already ended as finished" MCMCProgress.set_outcome!(c, failed)
 end
 
 @testset "teardown closes open phases and ends chains" begin
     r = MCMCProgress.Run("Sampling mymodel", 2)
     c1, c2 = chain(r, 1), chain(r, 2)
 
-    done = openphase!(c1, "Finding step size", Binary())
-    closephase!(done)
-    left_open = openphase!(c1, "Warmup", Determinate(1000))
+    done = open_phase!(c1, "Finding step size", Binary())
+    close_phase!(done)
+    left_open = open_phase!(c1, "Warmup", Determinate(1000))
     advance!(left_open, 250)
 
     closed_earlier = done.closed
-    MCMCProgress.closeopenphases!(c1)
+    MCMCProgress.close_open_phases!(c1)
     @test !isopen(left_open)
     @test left_open.closed isa UInt64
     @test left_open.position == 250
@@ -96,11 +99,11 @@ end
     @test done.closed === closed_earlier
 
     # A chain with nothing open is left as it is.
-    MCMCProgress.closeopenphases!(c2)
+    MCMCProgress.close_open_phases!(c2)
     @test isempty(c2.phases)
 
-    MCMCProgress.setoutcome!(c1, failed)
-    MCMCProgress.setoutcome!(c2, interrupted)
+    MCMCProgress.set_outcome!(c1, failed)
+    MCMCProgress.set_outcome!(c2, interrupted)
     @test c1.outcome == failed
     @test c2.outcome == interrupted
 end
@@ -108,7 +111,7 @@ end
 @testset "a snapshot copies live state without sharing it" begin
     r = MCMCProgress.Run("Sampling mymodel", 2)
     c = chain(r, 1)
-    p = openphase!(c, "Warmup", Determinate(1000))
+    p = open_phase!(c, "Warmup", Determinate(1000))
     advance!(p, 250)
 
     s = MCMCProgress.snapshot(r)
@@ -122,8 +125,8 @@ end
 
     # Advancing and closing afterwards leaves the copy alone.
     advance!(p, 1000)
-    closephase!(p)
-    MCMCProgress.setoutcome!(c, finished)
+    close_phase!(p)
+    MCMCProgress.set_outcome!(c, finished)
     @test s.chains[1].phases[1].position == 250
     @test s.chains[1].phases[1].closed === nothing
     @test s.chains[1].outcome === nothing
@@ -135,9 +138,9 @@ end
 
     # Two phases sharing a name are still told apart by their identity.
     c2 = chain(r, 2)
-    a = openphase!(c2, "Adapting", Counting())
-    closephase!(a)
-    b = openphase!(c2, "Adapting", Counting())
+    a = open_phase!(c2, "Adapting", Counting())
+    close_phase!(a)
+    b = open_phase!(c2, "Adapting", Counting())
     sc = MCMCProgress.snapshot(c2)
     @test sc.phases[1].name == sc.phases[2].name
     @test sc.phases[1].id != sc.phases[2].id
@@ -148,18 +151,16 @@ end
 @testset "a held chain lock delays neither advance! nor another chain" begin
     r = MCMCProgress.Run("Sampling mymodel", 2)
     c1, c2 = chain(r, 1), chain(r, 2)
-    p1 = openphase!(c1, "Warmup", Determinate(10))
+    p1 = open_phase!(c1, "Warmup", Determinate(10))
     done = Threads.Atomic{Bool}(false)
 
-    # Hold the lock guarding chain 1's structure while another task reports a
-    # position on chain 1 and runs a phase on chain 2. Neither needs that lock,
-    # so both finish while it is held.
+    # Advancing chain 1 and running a phase on chain 2 must not need chain 1's lock.
     lock(c1.lock) do
         wait(Threads.@spawn begin
             advance!(p1, 7)
-            p2 = openphase!(c2, "Warmup", Counting())
+            p2 = open_phase!(c2, "Warmup", Counting())
             advance!(p2, 3)
-            closephase!(p2)
+            close_phase!(p2)
             done[] = true
         end)
     end
@@ -177,23 +178,21 @@ end
     every = 2_000
     r = MCMCProgress.Run("Sampling mymodel", nchains)
 
-    # Each chain reports its own positions and, every so often, snapshots the
-    # whole run, so a snapshot is read on one task while the other chains write
-    # on theirs.
+    # Each chain snapshots the whole run periodically while the others write.
     records = map(1:nchains) do j
         Threads.@spawn begin
             c = chain(r, j)
-            b = openphase!(c, "Finding step size", Binary())
+            b = open_phase!(c, "Finding step size", Binary())
             advance!(b, 1)
-            closephase!(b)
-            w = openphase!(c, "Warmup", Determinate(total))
+            close_phase!(b)
+            w = open_phase!(c, "Warmup", Determinate(total))
             mine = RunSnapshot[]
             for i in 1:total
                 advance!(w, i)
                 i % every == 0 && push!(mine, MCMCProgress.snapshot(r))
             end
-            closephase!(w)
-            MCMCProgress.setoutcome!(c, finished)
+            close_phase!(w)
+            MCMCProgress.set_outcome!(c, finished)
             mine
         end
     end
@@ -206,9 +205,7 @@ end
     @test !isempty(seen)
     names = ["Finding step size", "Warmup"]
 
-    # Only a snapshot taken while two chains were both partway through a phase
-    # says anything about reading live state as it changes, so the count of
-    # those is reported alongside the assertions below.
+    # Only snapshots with two chains mid-phase test concurrent reads; report how many.
     reporting(cs) = any(ps -> ps.closed === nothing && 0 < ps.position < total, cs.phases)
     overlapping = count(s -> count(reporting, s.chains) >= 2, seen)
     if overlapping == 0
@@ -217,10 +214,7 @@ end
         @info "$overlapping of $(length(seen)) snapshots caught two or more chains reporting at once across $(Threads.nthreads()) threads"
     end
 
-    # What one snapshot must show: a prefix of the phases the chain will open,
-    # none out of order or partly built, and a closed phase carrying the position
-    # it finished on, since the lock that publishes the closing time also
-    # publishes the last position stored before it.
+    # A snapshot shows a prefix of the expected phases, closed ones at their final position.
     function consistent(s::RunSnapshot)
         length(s.chains) == nchains || return false
         for (j, cs) in pairs(s.chains)
@@ -240,9 +234,7 @@ end
         return true
     end
 
-    # Two snapshots one chain took in succession: every other chain only gains
-    # phases and advances positions, never losing a phase, going backwards, or
-    # reopening something already closed.
+    # Between successive snapshots no chain loses a phase, moves back, or reopens one.
     function monotonic(earlier::RunSnapshot, later::RunSnapshot)
         for j in eachindex(earlier.chains)
             before, after = earlier.chains[j], later.chains[j]
@@ -263,8 +255,7 @@ end
         (earlier, later) in zip(ordered, Iterators.drop(ordered, 1))
     ]
 
-    # Reported as the first offending index rather than as one assertion per
-    # snapshot, so a torn read names the snapshot it came from once.
+    # `findfirst` reports one offending snapshot instead of one failure per snapshot.
     @test findfirst(!consistent, seen) === nothing
     @test findfirst(pair -> !monotonic(pair...), successive) === nothing
 

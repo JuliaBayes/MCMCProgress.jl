@@ -1,10 +1,8 @@
-# Term's `start!`, `stop!` and `addjob!` write control sequences to the real
-# `stdout` and take no `IO` argument the way `render` does, so every call into
-# the extension is wrapped in `quietly` to keep the suite's output clean.
+# Term's `start!`, `stop!` and `addjob!` write to `stdout` and take no `IO`, so
+# calls into the extension are wrapped in `quietly`.
 quietly(f) = redirect_stdout(f, devnull)
 
-# `quietly`, but keeping what was written, so a test can assert on what the
-# terminal was told to draw.
+# Like `quietly`, but returns what was written.
 function loudly(f)
     pipe = Pipe()
     Base.link_pipe!(pipe; reader_supports_async=true, writer_supports_async=true)
@@ -17,13 +15,13 @@ function loudly(f)
     return fetch(written)
 end
 
-runsnapshot(nchains::Integer) = RunSnapshot(
+run_snapshot(nchains::Integer) = RunSnapshot(
     "Sampling mymodel",
     [ChainSnapshot(j, PhaseSnapshot[], nothing) for j in 1:nchains],
 )
 
 @testset "the run's label becomes the progress bar's title" begin
-    rs0 = runsnapshot(1)
+    rs0 = run_snapshot(1)
     handle = quietly() do
         setup(MCMCProgress.TermBackend(), rs0)
     end
@@ -34,7 +32,7 @@ runsnapshot(nchains::Integer) = RunSnapshot(
 end
 
 @testset "one bar per chain, created before the run starts and kept for the whole run" begin
-    rs0 = runsnapshot(3)
+    rs0 = run_snapshot(3)
     handle = quietly() do
         setup(MCMCProgress.TermBackend(), rs0)
     end
@@ -86,7 +84,7 @@ end
 end
 
 @testset "closing one chain's phase leaves every other chain's bar alone" begin
-    rs0 = runsnapshot(4)
+    rs0 = run_snapshot(4)
     handle = quietly() do
         setup(MCMCProgress.TermBackend(), rs0)
     end
@@ -117,9 +115,8 @@ end
         )
     end
 
-    # Chains 2 to 4 are still in warmup and must still say so. Term identifies a
-    # job by an `id` derived from how many jobs the bar holds, so a display that
-    # added and removed a job per phase deletes another chain's bar here.
+    # Chains 2 to 4 are still in warmup. Removing jobs per phase would delete the
+    # wrong bar, since Term derives a job's `id` from the number of jobs.
     for j in 2:4
         @test handle.jobs[j].description == "chain $j · Warmup"
         @test handle.jobs[j].N == 40
@@ -133,7 +130,7 @@ end
 end
 
 @testset "a chain's bar takes the description, total and columns of the phase it is in" begin
-    rs0 = runsnapshot(1)
+    rs0 = run_snapshot(1)
     handle = quietly() do
         setup(MCMCProgress.TermBackend(), rs0)
     end
@@ -145,9 +142,7 @@ end
     job = handle.jobs[1]
     @test job.description == "chain 1 · Warmup"
     @test job.N == 500
-    # A determinate phase draws a bar; counting and binary phases get Term's
-    # own spinner instead, attached by `ProgressJob.start!` once a job's `N`
-    # is `nothing`.
+    # A determinate phase gets a bar column; phases with no total get a spinner.
     @test any(c -> c isa Term.Progress.ProgressColumn, job.columns)
     @test !any(c -> c isa Term.Progress.SpinnerColumn, job.columns)
 
@@ -200,7 +195,7 @@ end
 end
 
 @testset "the default column set omits elapsed time but keeps the remaining-time estimate" begin
-    rs0 = runsnapshot(1)
+    rs0 = run_snapshot(1)
     handle = quietly() do
         setup(MCMCProgress.TermBackend(), rs0)
     end
@@ -225,7 +220,7 @@ end
 
 @testset "column configuration on the backend value reaches Term" begin
     mycols = DataType[Term.Progress.DescriptionColumn, Term.Progress.ProgressColumn]
-    rs0 = runsnapshot(1)
+    rs0 = run_snapshot(1)
     handle = quietly() do
         setup(MCMCProgress.TermBackend(mycols), rs0)
     end
@@ -247,7 +242,7 @@ end
 end
 
 @testset "a sampling phase's time-remaining clock is not distorted by a slow adaptation before it" begin
-    rs0 = runsnapshot(1)
+    rs0 = run_snapshot(1)
     handle = quietly() do
         setup(MCMCProgress.TermBackend(), rs0)
     end
@@ -272,9 +267,7 @@ end
     end
     job = handle.jobs[1]
 
-    # Term times a job from its own `startime`. Pointing a chain's bar at a new
-    # phase re-stamps that field, so the sampling estimate starts now rather
-    # than 0.3 s ago with the adaptation's.
+    # Opening a phase resets the job's `startime`, so the estimate excludes adaptation.
     @test job.startime >= before_sampling_opened
     @test (Dates.now() - job.startime) < Dates.Millisecond(200)  # well under the 300 ms adaptation
 
@@ -296,7 +289,7 @@ end
 end
 
 @testset "tearing down draws where the run ended" begin
-    rs0 = runsnapshot(1)
+    rs0 = run_snapshot(1)
     handle = quietly() do
         setup(MCMCProgress.TermBackend(), rs0)
     end
@@ -306,8 +299,7 @@ end
         phase_opened(handle, 1, sampling)
     end
 
-    # Tearing down is the only chance to draw the closing positions, the refresh
-    # task having stopped by then.
+    # The refresh task has stopped, so teardown must draw the closing positions.
     drawn = loudly() do
         phase_closed(handle, 1, closed)
         teardown(handle, RunSnapshot(rs0.label, [ChainSnapshot(1, [closed], finished)]))
@@ -317,7 +309,7 @@ end
 end
 
 @testset "interrupting a run stops the progress bar and leaves each chain where it stopped" begin
-    rs0 = runsnapshot(2)
+    rs0 = run_snapshot(2)
     handle = quietly() do
         setup(MCMCProgress.TermBackend(), rs0)
     end
@@ -330,8 +322,7 @@ end
     end
     @test length(handle.pbar.jobs) == 2
 
-    # `endrun!` closes every phase a run left open before tearing the backend
-    # down, however the run ends; this is that sequence seen from the backend.
+    # The calls `end_run!` makes: close the open phases, then tear down.
     p1_closed = PhaseSnapshot(UInt(1), "Warmup", Determinate(100), 40, UInt64(0), UInt64(1))
     p2_closed =
         PhaseSnapshot(UInt(2), "Finding step size", Binary(), 0, UInt64(0), UInt64(1))
@@ -359,13 +350,13 @@ end
     caught = nothing
     quietly() do
         try
-            MCMCProgress.displayrun(
+            MCMCProgress.display_run(
                 "Sampling mymodel",
                 2,
                 MCMCProgress.TermBackend(),
                 MCMCProgress.REFRESH_PERIOD,
             ) do run
-                openphase!(chain(run, 1), "Warmup", Determinate(100))
+                open_phase!(chain(run, 1), "Warmup", Determinate(100))
                 throw(InterruptException())
             end
         catch exception

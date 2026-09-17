@@ -23,9 +23,8 @@ A backend implements up to five functions, called at these points:
 `phase_opened` and `phase_closed` default to doing nothing, so the smallest
 possible backend implements only `setup`, `refresh`, and `teardown`.
 
-A backend must tolerate a chain opening a phase it has not announced before at
-any point during the run, and a run whose outcome is `failed` or `interrupted`
-rather than `finished`. Neither may raise an error.
+A backend must not throw when a chain opens a phase at any point during the run,
+or when a run ends as `failed` or `interrupted`.
 """
 function setup end
 
@@ -91,13 +90,13 @@ end
 """
     PlainTextBackend(io::IO=stdout; now=time_ns)
 
-The backend [`resolve_backend`](@ref) falls back to when nothing else is
-selected. Needs nothing but `io` to write to, and no package extension.
+A backend that writes lines of plain text to `io`. It is what
+[`resolve_backend`](@ref) returns when no other backend is selected, and needs
+no package extension.
 
 `now` times a phase that is still open: called with no arguments, it must
-return a `UInt64` count of nanoseconds, the convention `time_ns` follows.
-Rendering a closed phase never calls it, since a closed phase's opening and
-closing times already fix its elapsed time.
+return a `UInt64` count of nanoseconds, as `time_ns` does. It is not called for
+a closed phase.
 """
 struct PlainTextBackend{F}
     io::IO
@@ -110,14 +109,13 @@ PlainTextBackend(io::IO=stdout; now=time_ns) = PlainTextBackend{typeof(now)}(io,
 const _DEFAULT_BACKEND = Ref{Any}(nothing)
 
 """
-    setbackend!(backend)
+    set_backend!(backend)
 
 Set the process-wide default backend: what [`resolve_backend`](@ref) returns
-for a run started without an explicit `backend` argument, and what a
-`startup.jl` would set. Throws if `backend` needs a package extension that is
-not loaded.
+for a run started without an explicit `backend` argument. Can be called from
+`startup.jl`. Throws if `backend` needs a package extension that is not loaded.
 """
-function setbackend!(backend)
+function set_backend!(backend)
     _check_backend_loaded(backend)
     _DEFAULT_BACKEND[] = backend
     return backend
@@ -128,11 +126,11 @@ end
 
 The backend a run should use, in order of precedence: `explicit` if it is
 not `nothing`, otherwise the process-wide default set by
-[`setbackend!`](@ref), otherwise [`PlainTextBackend`](@ref). Throws if the
+[`set_backend!`](@ref), otherwise [`PlainTextBackend`](@ref). Throws if the
 resolved backend needs a package extension that is not loaded.
 
 Loading a package extension does not change this result: a backend becomes
-active only once passed here or given to `setbackend!`.
+active only once passed here or given to `set_backend!`.
 """
 function resolve_backend(explicit=nothing)
     backend = if explicit !== nothing
