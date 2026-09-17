@@ -3,9 +3,8 @@ using Printf: @sprintf
 """
     PlainTextHandle
 
-The mutable state behind [`PlainTextBackend`](@ref): the destination `io`, the
-clock for timing an open phase, the run's label and chain count, and the last
-progress key written for each chain index.
+The mutable state behind [`PlainTextBackend`](@ref). `last_written` maps a chain
+index to the `(phase id, bucket)` of the last line written for that chain.
 """
 mutable struct PlainTextHandle{F}
     io::IO
@@ -21,13 +20,11 @@ end
 PlainTextHandle(io::IO, now::F, label::AbstractString, n_chains::Integer) where {F} =
     PlainTextHandle{F}(io, now, String(label), Int(n_chains), Dict{Int,Tuple{UInt,Int}}())
 
-# How coarse the output is: `refresh` writes a line for a chain only once the
-# phase's bucket has moved, which holds a ten-thousand-step phase to a few dozen
-# lines. A determinate phase's bucket is its percentage rounded to a multiple of
-# five; a counting phase, having no total, buckets its position by
-# `_COUNTING_STEP`, matching CmdStan's default `refresh` of 100 iterations; a
-# binary phase has no position, so its bucket never moves and nothing further is
-# written for it until the phase closes.
+# `refresh` writes a chain's line only when its phase's bucket changes, which
+# limits a ten-thousand-step phase to a few dozen lines. A determinate phase's
+# bucket is its percentage divided by five, a counting phase's is its position
+# divided by `_COUNTING_STEP`, and a binary phase's never changes, so it gets no
+# lines between opening and closing.
 const _COUNTING_STEP = 100
 
 _bucket(::PhaseSnapshot{Binary}) = 0
@@ -55,8 +52,8 @@ _phase_text(phase::PhaseSnapshot{Determinate}) = string(
 _phase_text(phase::PhaseSnapshot{Counting}) = string(phase.name, " ", phase.position)
 _phase_text(phase::PhaseSnapshot{Binary}) = phase.name
 
-# An open phase is timed against `handle.now`; a closed phase's `opened` and
-# `closed` fields fix its elapsed time without consulting the clock.
+# Only an open phase reads `handle.now`; a closed phase is timed from its own
+# timestamps.
 function _elapsed_seconds(handle::PlainTextHandle, phase::PhaseSnapshot)
     finish = phase.closed === nothing ? handle.now() : phase.closed
     return (finish - phase.opened) / 1e9

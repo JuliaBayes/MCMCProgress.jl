@@ -77,7 +77,7 @@ using Dates: Dates
             @test MCMCProgress.resolve_backend() isa PlainTextBackend
 
             default_backend = MCMCProgress.RecordingBackend()
-            setbackend!(default_backend)
+            set_backend!(default_backend)
             @test MCMCProgress.resolve_backend() === default_backend  # falls back to the process-wide default
 
             explicit_backend = MCMCProgress.RecordingBackend()
@@ -94,7 +94,7 @@ using Dates: Dates
         MCMCProgress.backend_package(::UnloadedExtBackend) = "FakeExtPackage"
 
         @test_throws "FakeExtPackage" MCMCProgress.resolve_backend(UnloadedExtBackend())
-        @test_throws "FakeExtPackage" setbackend!(UnloadedExtBackend())
+        @test_throws "FakeExtPackage" set_backend!(UnloadedExtBackend())
     end
 
 end

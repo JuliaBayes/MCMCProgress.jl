@@ -1,13 +1,11 @@
-# Backends that exist to be driven by a run rather than to draw anything, plus
-# the shorter refresh clock the tests here run on.
+# Test backends that record calls instead of drawing, and a shorter refresh period.
 
 """
     ClockBackend(; long=0, pause=0.0)
 
-Records the time each refresh begins, in `times`, and makes refresh number
-`long` take `pause` seconds. `times` is guarded by `lock`, so a body can read it
-while the refresh task is running; a refresh records its time before pausing, so
-the recorded time is when the refresh began.
+Records the start time of each refresh in `times`, and makes refresh number
+`long` sleep for `pause` seconds after recording its time. `times` is guarded by
+`lock`, so the body can read it during the run.
 """
 mutable struct ClockBackend
     times::Vector{UInt64}
@@ -32,17 +30,15 @@ end
 
 MCMCProgress.teardown(::ClockBackend, ::RunSnapshot) = nothing
 
-refreshcount(backend::ClockBackend) = lock(() -> length(backend.times), backend.lock)
+refresh_count(backend::ClockBackend) = lock(() -> length(backend.times), backend.lock)
 
-refreshtimes(backend::ClockBackend) = lock(() -> copy(backend.times), backend.lock)
+refresh_times(backend::ClockBackend) = lock(() -> copy(backend.times), backend.lock)
 
 """
     FailingBackend(failing::Symbol)
 
-Records the name of every call it is given, in `calls`, and throws from the call
-named `failing` — one of `:refresh`, `:phase_closed` or `:teardown`. A test reads
-`calls` after the run has ended to see which calls still happened after one of
-them threw.
+Records the name of every call in `calls`, and throws from the call named
+`failing`: one of `:refresh`, `:phase_closed` or `:teardown`.
 """
 mutable struct FailingBackend
     calls::Vector{Symbol}
@@ -74,16 +70,15 @@ function MCMCProgress.teardown(backend::FailingBackend, ::RunSnapshot)
     return nothing
 end
 
-# Twenty milliseconds, so a body of a tenth of a second sees several refreshes.
-# A caller gets `MCMCProgress.REFRESH_PERIOD` instead.
+# 20 ms, so a body lasting 0.1 s sees several refreshes.
 const TEST_PERIOD = UInt64(20_000_000)
 
-quickrun(f, backend; nchains::Integer=1, period::UInt64=TEST_PERIOD) =
-    MCMCProgress.displayrun(f, "Sampling mymodel", nchains, backend, period)
+quick_run(f, backend; nchains::Integer=1, period::UInt64=TEST_PERIOD) =
+    MCMCProgress.display_run(f, "Sampling mymodel", nchains, backend, period)
 
-callnames(backend::MCMCProgress.RecordingBackend) = [call[1] for call in backend.calls]
+call_names(backend::MCMCProgress.RecordingBackend) = [call[1] for call in backend.calls]
 
-finalsnapshot(backend::MCMCProgress.RecordingBackend) = last(backend.calls)[2]
+final_snapshot(backend::MCMCProgress.RecordingBackend) = last(backend.calls)[2]
 
 # The middle value of `xs`, so one stray reading does not decide the result.
 middling(xs) = sort(xs)[(length(xs)+1)÷2]
@@ -92,21 +87,21 @@ middling(xs) = sort(xs)[(length(xs)+1)÷2]
     backend = MCMCProgress.RecordingBackend()
     result = progress(; label="Sampling mymodel", nchains=2, backend=backend) do run
         c = chain(run, 1)
-        p = openphase!(c, "Warmup", Determinate(10))
+        p = open_phase!(c, "Warmup", Determinate(10))
         advance!(p, 10)
-        closephase!(p)
+        close_phase!(p)
         :sampled
     end
 
     @test result === :sampled  # progress hands back whatever the body returns
 
-    names = callnames(backend)
+    names = call_names(backend)
     @test first(names) === :setup
     @test last(names) === :teardown
     @test :phase_opened in names
     @test :phase_closed in names
 
-    final = finalsnapshot(backend)
+    final = final_snapshot(backend)
     @test [c.outcome for c in final.chains] == [finished, finished]
     @test final.chains[1].phases[1].position == 10
 end
@@ -115,12 +110,12 @@ end
     saved_default = MCMCProgress._DEFAULT_BACKEND[]
     try
         backend = MCMCProgress.RecordingBackend()
-        setbackend!(backend)
+        set_backend!(backend)
         progress(; label="Sampling mymodel", nchains=1) do run
             nothing
         end
-        @test first(callnames(backend)) === :setup
-        @test last(callnames(backend)) === :teardown
+        @test first(call_names(backend)) === :setup
+        @test last(call_names(backend)) === :teardown
     finally
         MCMCProgress._DEFAULT_BACKEND[] = saved_default
     end
@@ -128,24 +123,23 @@ end
 
 @testset "phases are announced to the backend in the order a chain opens them" begin
     backend = MCMCProgress.RecordingBackend()
-    quickrun(backend) do run
+    quick_run(backend) do run
         c = chain(run, 1)
-        step = openphase!(c, "Finding step size", Binary())
-        closephase!(step)
-        warmup = openphase!(c, "Warmup", Determinate(4))
+        step = open_phase!(c, "Finding step size", Binary())
+        close_phase!(step)
+        warmup = open_phase!(c, "Warmup", Determinate(4))
         for i in 1:4
             advance!(warmup, i)
             sleep(TEST_PERIOD / 1e9)
         end
-        closephase!(warmup)
+        close_phase!(warmup)
     end
 
     announcements = [
         call for
         call in backend.calls if call[1] === :phase_opened || call[1] === :phase_closed
     ]
-    # A phase that opens and closes between two refreshes is still announced
-    # both times, in order, from the snapshot that first shows it.
+    # A phase that opens and closes between refreshes is still announced twice, in order.
     @test [(call[1], call[3].name) for call in announcements] == [
         (:phase_opened, "Finding step size"),
         (:phase_closed, "Finding step size"),
@@ -157,13 +151,13 @@ end
 
 @testset "a phase left open by the body is closed by the teardown" begin
     backend = MCMCProgress.RecordingBackend()
-    quickrun(backend) do run
-        openphase!(chain(run, 1), "Warmup", Determinate(100))
+    quick_run(backend) do run
+        open_phase!(chain(run, 1), "Warmup", Determinate(100))
         sleep(3 * TEST_PERIOD / 1e9)
         nothing
     end
 
-    names = callnames(backend)
+    names = call_names(backend)
     @test last(names) === :teardown
     # The phase is announced as closed before the backend is torn down.
     @test findlast(==(:phase_closed), names) < findlast(==(:teardown), names)
@@ -172,7 +166,7 @@ end
     @test closing[3].name == "Warmup"
     @test closing[3].closed isa UInt64
 
-    phase = finalsnapshot(backend).chains[1].phases[1]
+    phase = final_snapshot(backend).chains[1].phases[1]
     @test phase.closed isa UInt64
     @test phase.closed >= phase.opened
 end
@@ -183,8 +177,8 @@ end
 
     caught = nothing
     try
-        quickrun(backend; nchains=2) do run
-            openphase!(chain(run, 1), "Warmup", Determinate(100))
+        quick_run(backend; nchains=2) do run
+            open_phase!(chain(run, 1), "Warmup", Determinate(100))
             throw(blewup)
         end
     catch exception
@@ -193,22 +187,22 @@ end
 
     @test caught === blewup  # the same object, not a copy and not a wrapper
 
-    # The display is still finished off, which is what leaves the terminal usable.
-    @test last(callnames(backend)) === :teardown
-    final = finalsnapshot(backend)
+    # The backend is still torn down.
+    @test last(call_names(backend)) === :teardown
+    final = final_snapshot(backend)
     @test [c.outcome for c in final.chains] == [failed, failed]
     @test final.chains[1].phases[1].closed isa UInt64
 end
 
 @testset "an InterruptException ends the chains as interrupted" begin
     backend = MCMCProgress.RecordingBackend()
-    @test_throws InterruptException quickrun(backend; nchains=3) do run
-        openphase!(chain(run, 2), "Warmup", Determinate(100))
+    @test_throws InterruptException quick_run(backend; nchains=3) do run
+        open_phase!(chain(run, 2), "Warmup", Determinate(100))
         throw(InterruptException())
     end
 
-    @test last(callnames(backend)) === :teardown
-    final = finalsnapshot(backend)
+    @test last(call_names(backend)) === :teardown
+    final = final_snapshot(backend)
     @test [c.outcome for c in final.chains] == [interrupted, interrupted, interrupted]
     @test final.chains[2].phases[1].closed isa UInt64
 end
@@ -217,8 +211,8 @@ end
     backend = MCMCProgress.RecordingBackend()
     caught = nothing
     try
-        quickrun(backend; nchains=2) do run
-            MCMCProgress.setoutcome!(chain(run, 1), finished)
+        quick_run(backend; nchains=2) do run
+            MCMCProgress.set_outcome!(chain(run, 1), finished)
             error("the sampler blew up")
         end
     catch exception
@@ -226,7 +220,7 @@ end
     end
 
     @test caught isa ErrorException
-    @test [c.outcome for c in finalsnapshot(backend).chains] == [finished, failed]
+    @test [c.outcome for c in final_snapshot(backend).chains] == [finished, failed]
 end
 
 @testset "the refresh task is stopped before progress returns, however it ends" begin
@@ -240,15 +234,13 @@ end
         @testset "a body that $what" begin
             backend = MCMCProgress.RecordingBackend()
             try
-                quickrun(body, backend)
+                quick_run(body, backend)
             catch
                 # This testset asserts what the backend is told, and when.
             end
 
-            names = callnames(backend)
-            # A tenth of a second on a twenty millisecond clock: several
-            # refreshes are due, and at least one must have happened for the
-            # assertions below to mean anything.
+            names = call_names(backend)
+            # The assertions below need at least one refresh to have run.
             @test count(==(:refresh), names) >= 1
             @test last(names) === :teardown  # nothing is drawn after the teardown
 
@@ -262,8 +254,8 @@ end
 @testset "the backend is torn down even when an earlier teardown step throws" begin
     @testset "a backend that cannot close a phase" begin
         backend = FailingBackend(:phase_closed)
-        @test_throws "this backend cannot close a phase" quickrun(backend) do run
-            openphase!(chain(run, 1), "Warmup", Determinate(100))
+        @test_throws "this backend cannot close a phase" quick_run(backend) do run
+            open_phase!(chain(run, 1), "Warmup", Determinate(100))
             nothing
         end
         @test :teardown in backend.calls
@@ -271,9 +263,8 @@ end
 
     @testset "a backend that cannot refresh" begin
         backend = FailingBackend(:refresh)
-        # The refresh task dies of the failure, which surfaces where the run
-        # stops it rather than going unreported.
-        @test_throws "this backend cannot refresh" quickrun(backend) do run
+        # The refresh task's exception is rethrown when the run stops it.
+        @test_throws "this backend cannot refresh" quick_run(backend) do run
             sleep(0.1)
             nothing
         end
@@ -282,7 +273,7 @@ end
 
     @testset "a backend that cannot tear down" begin
         backend = FailingBackend(:teardown)
-        @test_throws "this backend cannot tear down" quickrun(backend) do run
+        @test_throws "this backend cannot tear down" quick_run(backend) do run
             nothing
         end
         @test :teardown in backend.calls
@@ -297,7 +288,7 @@ end
     # The teardown's own failure is logged, so that neither exception is lost.
     @test_logs (:error,) match_mode = :any begin
         try
-            quickrun(backend) do run
+            quick_run(backend) do run
                 throw(blewup)
             end
         catch exception
@@ -311,10 +302,9 @@ end
 
 @testset "the refresh task refreshes while the body runs" begin
     backend = ClockBackend()
-    quickrun(backend) do run
-        # Waiting for the display rather than for the clock: a test that hangs
-        # here reports a refresh task that never runs, instead of hanging.
-        @test timedwait(() -> refreshcount(backend) >= 3, 10.0) === :ok
+    quick_run(backend) do run
+        # A refresh task that never runs times out here instead of hanging.
+        @test timedwait(() -> refresh_count(backend) >= 3, 10.0) === :ok
         nothing
     end
 end
@@ -323,7 +313,7 @@ end
     run = MCMCProgress.Run("Sampling mymodel", 1)
     backend = MCMCProgress.RecordingBackend()
     stop = Threads.Atomic{Bool}(true)  # already stopped, so the loop draws nothing
-    task = MCMCProgress.spawnrefresh(
+    task = MCMCProgress.spawn_refresh(
         run,
         backend,
         MCMCProgress.Announced(1),
@@ -332,8 +322,7 @@ end
     )
     wait(task)
 
-    # An interactive thread wherever the session has one, so that sampling work
-    # filling the default pool cannot hold the display up.
+    # The interactive pool when the session has one.
     expected = Threads.threadpoolsize(:interactive) > 0 ? :interactive : :default
     @test Threads.threadpool(task) === expected
     @test isempty(backend.calls)
@@ -344,23 +333,20 @@ end
     deadline = UInt64(1000)
 
     # A refresh done before its deadline: the next is a whole period later.
-    @test MCMCProgress.nextdeadline(deadline, period, deadline - UInt64(5)) ==
+    @test MCMCProgress.next_deadline(deadline, period, deadline - UInt64(5)) ==
           deadline + period
-    @test MCMCProgress.nextdeadline(deadline, period, deadline + UInt64(50)) ==
+    @test MCMCProgress.next_deadline(deadline, period, deadline + UInt64(50)) ==
           deadline + period
 
-    # A refresh still running when the next deadline falls due: that deadline is
-    # skipped rather than fired late, and the one after it lands on the grid.
-    @test MCMCProgress.nextdeadline(deadline, period, deadline + period) ==
+    # A refresh still running at the next deadline: that deadline is skipped.
+    @test MCMCProgress.next_deadline(deadline, period, deadline + period) ==
           deadline + 2 * period
-    @test MCMCProgress.nextdeadline(deadline, period, deadline + 3 * period + UInt64(1)) ==
+    @test MCMCProgress.next_deadline(deadline, period, deadline + 3 * period + UInt64(1)) ==
           deadline + 4 * period
 
-    # However long a refresh overruns, the deadline that follows is the earliest
-    # one later than now on the grid that runs through the deadline it started
-    # from: never earlier, never more than one period later, never off the grid.
-    function ongrid((p, d, now))
-        next = MCMCProgress.nextdeadline(d, p, now)
+    # For any overrun, the next deadline is the first grid point after `now`.
+    function on_grid((p, d, now))
+        next = MCMCProgress.next_deadline(d, p, now)
         return next > now && next <= now + p && (next - d) % p == 0
     end
 
@@ -369,39 +355,34 @@ end
         d = UInt64(rand(0:1_000_000))
         (p, d, d + UInt64(rand(0:100)) * p + UInt64(rand(0:1000)))
     end
-    # The first offending draw, so a failure names the period, deadline and time
-    # it came from rather than repeating across two hundred of them.
-    @test findfirst(!ongrid, draws) === nothing
+    # `findfirst` reports one offending draw instead of up to two hundred failures.
+    @test findfirst(!on_grid, draws) === nothing
 end
 
 @testset "a long refresh neither shifts the clock nor fires a burst of refreshes" begin
     period = UInt64(100_000_000)  # 100 ms, as a caller gets
     backend = ClockBackend(; long=2, pause=0.15)  # one refresh overruns by half
-    MCMCProgress.displayrun(run -> sleep(1.2), "Sampling mymodel", 1, backend, period)
+    MCMCProgress.display_run(run -> sleep(1.2), "Sampling mymodel", 1, backend, period)
 
-    times = refreshtimes(backend)
+    times = refresh_times(backend)
     @test length(times) >= 4
 
-    # Every refresh should fall on the grid the first one set, so the time by
-    # which each misses the nearest grid point stays near zero. A clock that
-    # slid by the overrun would miss by fifty milliseconds every time. The
-    # middle reading is what is asserted, and the bound is generous, so that
-    # neither one late wake-up nor a busy machine fails this.
+    # Refreshes stay on the grid the first one set; a drifting clock would miss
+    # by 50 ms each time. The median and a loose bound tolerate a busy machine.
     offgrid = map(times[(begin+1):end]) do t
         remainder = (t - times[begin]) % period
         min(remainder, period - remainder)
     end
     @test middling(offgrid) < period ÷ 3
 
-    # Skipping the deadlines that passed during the long refresh, rather than
-    # firing one refresh for each, keeps every gap close to a whole period.
+    # Skipped deadlines keep every gap close to a whole period.
     gaps = diff(times)
     @test minimum(gaps) > period ÷ 2
 end
 
 @testset "a refresh period must be positive" begin
     backend = MCMCProgress.RecordingBackend()
-    @test_throws "a refresh period must be positive" MCMCProgress.displayrun(
+    @test_throws "a refresh period must be positive" MCMCProgress.display_run(
         run -> nothing,
         "Sampling mymodel",
         1,
@@ -415,24 +396,24 @@ end
     total = 50
     backend = MCMCProgress.RecordingBackend()
 
-    quickrun(backend; nchains) do run
+    quick_run(backend; nchains) do run
         @sync for j in 1:nchains
             Threads.@spawn begin
                 c = chain(run, j)
-                step = openphase!(c, "Finding step size", Binary())
+                step = open_phase!(c, "Finding step size", Binary())
                 sleep(TEST_PERIOD / 1e9)
-                closephase!(step)
-                warmup = openphase!(c, "Warmup", Determinate(total))
+                close_phase!(step)
+                warmup = open_phase!(c, "Warmup", Determinate(total))
                 for i in 1:total
                     advance!(warmup, i)
                     sleep(TEST_PERIOD / 1e9 / 10)
                 end
-                closephase!(warmup)
+                close_phase!(warmup)
             end
         end
     end
 
-    final = finalsnapshot(backend)
+    final = final_snapshot(backend)
     @test [c.outcome for c in final.chains] == fill(finished, nchains)
     for c in final.chains
         @test [p.name for p in c.phases] == ["Finding step size", "Warmup"]
