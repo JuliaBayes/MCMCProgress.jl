@@ -135,7 +135,7 @@ end
 Display the progress of a run of `nchains` chains called `label` while `f(run)`
 samples, and return whatever `f` returns.
 
-`f` is handed the run to report on: [`chain`](@ref) reaches one of its chains,
+`f` is handed the run to report on: [`chain_at`](@ref) reaches one of its chains,
 and [`open_phase!`](@ref), [`advance!`](@ref) and [`close_phase!`](@ref) report
 that chain's progress. Chains may run on separate tasks, each reporting on its
 own.

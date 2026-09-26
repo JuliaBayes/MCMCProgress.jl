@@ -18,7 +18,7 @@ The progress for each chain is tracked by a `Chain` object.
 MCMCProgress.chains
 MCMCProgress.num_chains
 MCMCProgress.Chain
-MCMCProgress.chain
+MCMCProgress.chain_at
 ```
 
 ## Phases
@@ -36,9 +36,9 @@ MCMCProgress.Determinate
 Phases can be manipulated and queried with the following functions:
 
 ```@docs
-MCMCProgress.openphase!
+MCMCProgress.open_phase!
 MCMCProgress.advance!
-MCMCProgress.closephase!
+MCMCProgress.close_phase!
 MCMCProgress.phase_opened
 MCMCProgress.phase_closed
 ```
@@ -63,7 +63,7 @@ MCMCProgress.TermBackend
 ```
 
 ```@docs
-MCMCProgress.setbackend!
+MCMCProgress.set_backend!
 MCMCProgress.backend_package
 MCMCProgress.refresh
 MCMCProgress.progress

@@ -35,12 +35,25 @@ Run(label::AbstractString, nchains::Integer) = Run(label, [Chain(i) for i in 1:n
 
 The chain at `index` within `run`. A run's chains are fixed when it is created,
 so this lookup takes no lock.
-
 ```julia
 c = chain_at(run, j)
 ```
 """
 chain_at(run::Run, index::Integer) = run.chains[index]
+
+"""
+    num_chains(run::Run) -> Int
+
+Return the number of chains in `run`.
+"""
+num_chains(run::Run) = length(run.chains)
+
+"""
+    chains(run::Run) -> Vector{Chain}
+
+Return a vector of the chains in `run`.
+"""
+chains(run::Run) = run.chains
 
 """
     RunSnapshot
