@@ -6,7 +6,7 @@ As described in the main documentation, a `Run` object is the top-level object t
 
 ```@docs
 MCMCProgress.Run
-MCMCProgress.Outcome
+MCMCProgress.progress
 ```
 
 ## Chains
@@ -27,7 +27,6 @@ MCMCProgress currently exposes the following phase types:
 
 ```@docs
 MCMCProgress.Phase
-MCMCProgress.PhaseKind
 MCMCProgress.Binary
 MCMCProgress.Counting
 MCMCProgress.Determinate
@@ -39,19 +38,6 @@ Phases can be manipulated and queried with the following functions:
 MCMCProgress.open_phase!
 MCMCProgress.advance!
 MCMCProgress.close_phase!
-MCMCProgress.phase_opened
-MCMCProgress.phase_closed
-```
-
-## Snapshots
-
-The `Run`, `Chain`, and `Phase` objects are mutable.
-At regular intervals, MCMCProgress takes a _snapshot_ of the current state of the run, and stores it in a `RunSnapshot`, `ChainSnapshot`, or `PhaseSnapshot` object, which is then sent to the backend.
-
-```@docs
-MCMCProgress.RunSnapshot
-MCMCProgress.ChainSnapshot
-MCMCProgress.PhaseSnapshot
 ```
 
 ## Backends
@@ -60,13 +46,4 @@ MCMCProgress.PhaseSnapshot
 MCMCProgress.ProgressLoggingBackend
 MCMCProgress.PlainTextBackend
 MCMCProgress.TermBackend
-```
-
-```@docs
-MCMCProgress.set_backend!
-MCMCProgress.backend_package
-MCMCProgress.refresh
-MCMCProgress.progress
-MCMCProgress.setup
-MCMCProgress.teardown
 ```

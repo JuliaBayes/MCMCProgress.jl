@@ -12,13 +12,13 @@ here, never with `backend` itself.
 
 A backend implements up to five functions, called at these points:
 
-| Function                              | Called                      |
-|:-------------------------------------- |:---------------------------|
-| [`setup`](@ref)                        | once, as the run starts     |
-| [`phase_opened`](@ref)                 | when a chain enters a phase |
-| [`phase_closed`](@ref)                 | when a chain leaves a phase |
-| [`refresh`](@ref)                      | on a fixed clock            |
-| [`teardown`](@ref)                     | once, as the run ends       |
+| Function                       | Called                      |
+|:------------------------------ |:---------------------------|
+| `setup`                        | once, as the run starts     |
+| `phase_opened`                 | when a chain enters a phase |
+| `phase_closed`                 | when a chain leaves a phase |
+| `refresh`                      | on a fixed clock            |
+| `teardown`                     | once, as the run ends       |
 
 `phase_opened` and `phase_closed` default to doing nothing, so the smallest
 possible backend implements only `setup`, `refresh`, and `teardown`.
@@ -126,7 +126,7 @@ end
 
 The backend a run should use, in order of precedence: `explicit` if it is
 not `nothing`, otherwise the process-wide default set by
-[`set_backend!`](@ref), otherwise [`PlainTextBackend`](@ref). Throws if the
+`set_backend!`, otherwise [`PlainTextBackend`](@ref). Throws if the
 resolved backend needs a package extension that is not loaded.
 
 Loading a package extension does not change this result: a backend becomes

@@ -1,13 +1,9 @@
 module MCMCProgress
 
-export Run, Chain, chains, num_chains, Phase, PhaseKind, Determinate, Counting, Binary
-export Outcome, finished, failed, interrupted
-export RunSnapshot, ChainSnapshot, PhaseSnapshot
-export progress, chain_at, open_phase!, advance!, close_phase!
-export setup, phase_opened, phase_closed, refresh, teardown
-export set_backend!, PlainTextBackend, backend_package
-export ProgressLoggingBackend
-export TermBackend
+export Run, progress, Chain, chains, num_chains, chain_at
+export Phase, Determinate, Counting, Binary
+export open_phase!, advance!, close_phase!
+export PlainTextBackend, ProgressLoggingBackend, TermBackend
 
 include("phase_kinds.jl")
 include("outcome.jl")
