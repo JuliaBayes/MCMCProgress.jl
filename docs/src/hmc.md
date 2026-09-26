@@ -162,4 +162,6 @@ end
 
 These don't render well in built documentation, so we can't run it here, but here's a video of it:
 
-TODO: Insert
+```@raw html
+<script src="https://asciinema.org/a/bLn2Bv8nJQncWrqF.js" id="asciicast-bLn2Bv8nJQncWrqF" async="true"></script>
+```
