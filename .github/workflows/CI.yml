@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
-    runs-on: ${{ matrix.os }}
+    name: Julia ${{ matrix.runner.version }} - ${{ matrix.runner.os }}
+    runs-on: ${{ matrix.runner.os }}
     timeout-minutes: 60
     permissions: # needed to allow julia-actions/cache to proactively delete old caches that it has created
       actions: write
@@ -22,22 +22,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version:
-          - '1.10'
-          - '1.13'
-          - 'pre'
-        os:
-          - ubuntu-latest
-        arch:
-          - x64
+        runner:
+          - version: 'lts'
+            os: ubuntu-latest
+          - version: '1.11'
+            os: ubuntu-latest
+          - version: '1.12'
+            os: ubuntu-latest
+          - version: '1'
+            os: ubuntu-latest
+          - version: '1'
+            os: macos-latest
+          - version: '1'
+            os: windows-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: julia-actions/setup-julia@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
+      - uses: julia-actions/setup-julia@fa02766e078afaaf09b14210362cee14137e6a32 # 3.0.2
         with:
-          version: ${{ matrix.version }}
-          arch: ${{ matrix.arch }}
-      - uses: julia-actions/cache@v3
-      - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-runtest@v1
+          version: ${{ matrix.runner.version }}
+      - uses: julia-actions/cache@a7bed9df697e5d7309d68afe7542a87621a8b6c8 # 3.3.0
+      - uses: julia-actions/julia-runtest@6e050c8013b833b1195105ff2fce9cd802f53271 # 1.12.0
         env:
           JULIA_NUM_THREADS: 4,1
