@@ -1,6 +1,6 @@
 module MCMCProgress
 
-export PhaseKind, Determinate, Counting, Binary
+export Run, Chain, chains, num_chains, Phase, PhaseKind, Determinate, Counting, Binary
 export Outcome, finished, failed, interrupted
 export RunSnapshot, ChainSnapshot, PhaseSnapshot
 export progress, chain_at, open_phase!, advance!, close_phase!

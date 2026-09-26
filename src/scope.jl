@@ -143,7 +143,7 @@ own.
 `backend` selects the display. If it is omitted, the default set by
 [`set_backend!`](@ref) is used, or [`PlainTextBackend`](@ref) if none is set.
 
-A separate task refreshes the backend every [`REFRESH_PERIOD`](@ref)
+A separate task refreshes the backend every `REFRESH_PERIOD`
 nanoseconds. Recording a position never waits for the display.
 
 However `f` ends, any phase left open is closed, every chain still running is

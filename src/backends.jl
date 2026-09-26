@@ -91,7 +91,7 @@ end
     PlainTextBackend(io::IO=stdout; now=time_ns)
 
 A backend that writes lines of plain text to `io`. It is what
-[`resolve_backend`](@ref) returns when no other backend is selected, and needs
+`resolve_backend` returns when no other backend is selected, and needs
 no package extension.
 
 `now` times a phase that is still open: called with no arguments, it must
@@ -111,7 +111,7 @@ const _DEFAULT_BACKEND = Ref{Any}(nothing)
 """
     set_backend!(backend)
 
-Set the process-wide default backend: what [`resolve_backend`](@ref) returns
+Set the process-wide default backend: what `resolve_backend` returns
 for a run started without an explicit `backend` argument. Can be called from
 `startup.jl`. Throws if `backend` needs a package extension that is not loaded.
 """
