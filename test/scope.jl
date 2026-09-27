@@ -435,7 +435,7 @@ end
 end
 
 @testset "the refresh task is spawned on the pool the session has threads for" begin
-    run = MCMCProgress.Run("Sampling mymodel", 1)
+    run = MCMCProgress.RunProgress("Sampling mymodel", 1)
     backend = MCMCProgress.RecordingBackend()
     stop = Threads.Atomic{Bool}(true)  # already stopped, so the loop draws nothing
     task = MCMCProgress.spawn_refresh(

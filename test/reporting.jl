@@ -1,5 +1,5 @@
 @testset "chain_at rejects an index the run does not have" begin
-    r = MCMCProgress.Run("Sampling mymodel", 3)
+    r = MCMCProgress.RunProgress("Sampling mymodel", 3)
     @test_throws BoundsError chain_at(r, 4)
     @test_throws BoundsError chain_at(r, 0)
 end
@@ -9,12 +9,12 @@ end
     phases = [MCMCProgress.Phase("Warmup", Determinate(10), shared)]
     @test phases isa Vector{MCMCProgress.Phase{Determinate}}  # concretely typed
 
-    c = MCMCProgress.Chain(1, phases, nothing, shared)
+    c = MCMCProgress.ChainProgress(1, phases, nothing, shared)
     @test c.phases == phases
     @test c.phases isa Vector{MCMCProgress.Phase}
 
     foreign = MCMCProgress.Phase("Sampling", Counting())
-    @test_throws "the phase \"Sampling\" holds a different lock from chain 1" MCMCProgress.Chain(
+    @test_throws "the phase \"Sampling\" holds a different lock from chain 1" MCMCProgress.ChainProgress(
         1,
         [foreign],
         nothing,
@@ -23,7 +23,7 @@ end
 end
 
 @testset "a phase is opened, advanced, and closed" begin
-    r = MCMCProgress.Run("Sampling mymodel", 1)
+    r = MCMCProgress.RunProgress("Sampling mymodel", 1)
     c = chain_at(r, 1)
 
     p = open_phase!(c, "Warmup", Determinate(1000))
@@ -42,7 +42,7 @@ end
 end
 
 @testset "advance! sets an absolute position" begin
-    r = MCMCProgress.Run("Sampling mymodel", 1)
+    r = MCMCProgress.RunProgress("Sampling mymodel", 1)
     p = open_phase!(chain_at(r, 1), "Adapting", Counting())
 
     advance!(p, 5)
@@ -58,7 +58,7 @@ end
 end
 
 @testset "advance! on a binary phase does nothing" begin
-    r = MCMCProgress.Run("Sampling mymodel", 1)
+    r = MCMCProgress.RunProgress("Sampling mymodel", 1)
     c = chain_at(r, 1)
     p = open_phase!(c, "Finding step size", Binary())
 
@@ -72,7 +72,7 @@ end
 end
 
 @testset "reporting rejects what it cannot represent" begin
-    r = MCMCProgress.Run("Sampling mymodel", 2)
+    r = MCMCProgress.RunProgress("Sampling mymodel", 2)
     c = chain_at(r, 1)
 
     d = open_phase!(c, "Warmup", Determinate(1000))
@@ -100,7 +100,7 @@ end
 end
 
 @testset "teardown closes open phases and ends chains" begin
-    r = MCMCProgress.Run("Sampling mymodel", 2)
+    r = MCMCProgress.RunProgress("Sampling mymodel", 2)
     c1, c2 = chain_at(r, 1), chain_at(r, 2)
 
     done = open_phase!(c1, "Finding step size", Binary())
@@ -127,7 +127,7 @@ end
 end
 
 @testset "a snapshot copies live state without sharing it" begin
-    r = MCMCProgress.Run("Sampling mymodel", 2)
+    r = MCMCProgress.RunProgress("Sampling mymodel", 2)
     c = chain_at(r, 1)
     p = open_phase!(c, "Warmup", Determinate(1000))
     advance!(p, 250)
@@ -167,7 +167,7 @@ end
 end
 
 @testset "a held chain lock delays neither advance! nor another chain" begin
-    r = MCMCProgress.Run("Sampling mymodel", 2)
+    r = MCMCProgress.RunProgress("Sampling mymodel", 2)
     c1, c2 = chain_at(r, 1), chain_at(r, 2)
     p1 = open_phase!(c1, "Warmup", Determinate(10))
     done = Threads.Atomic{Bool}(false)
@@ -194,7 +194,7 @@ end
     nchains = 4
     total = 200_000
     every = 2_000
-    r = MCMCProgress.Run("Sampling mymodel", nchains)
+    r = MCMCProgress.RunProgress("Sampling mymodel", nchains)
 
     # Each chain snapshots the whole run periodically while the others write.
     records = map(1:nchains) do j

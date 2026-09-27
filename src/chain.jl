@@ -85,10 +85,10 @@ struct ChainSnapshot
     phases::Tuple{Vararg{PhaseSnapshot}}
     outcome::Union{Outcome,Nothing}
 
-    function ChainSnapshot(c::ChainProgress)
-        return lock(c.lock) do
-            new(c.index, tuple(map(PhaseSnapshot, c.phases)...), c.outcome[])
-        end
+end
+function ChainSnapshot(c::ChainProgress)
+    return lock(c.lock) do
+        ChainSnapshot(c.index, tuple(map(PhaseSnapshot, c.phases)...), c.outcome[])
     end
 end
 

@@ -13,13 +13,13 @@ that phase determinate; without one it counts.
 position immediately after each report.
 """
 mutable struct PhaseReporter
-    chain::MCMCProgress.Chain
+    chain::MCMCProgress.ChainProgress
     phase::MCMCProgress.Phase
     steps::Vector{Int}
     positions::Vector{Int}
 end
 
-PhaseReporter(c::MCMCProgress.Chain, name::AbstractString, total=nothing) =
+PhaseReporter(c::MCMCProgress.ChainProgress, name::AbstractString, total=nothing) =
     PhaseReporter(c, open_phase!(c, name, phase_kind(total)), Int[], Int[])
 
 # `nothing` means the sampler knows no total.
@@ -126,7 +126,7 @@ end
 
 # Run the sampler for each chain on its own task and return the reporters. Every
 # report after a reporter is created comes from inside the sampler.
-function drive_chains(run::MCMCProgress.Run, plans::AbstractVector{SamplerPlan})
+function drive_chains(run::MCMCProgress.RunProgress, plans::AbstractVector{SamplerPlan})
     reporters = map(eachindex(plans)) do j
         PhaseReporter(chain_at(run, j), "Warmup", plans[j].warmuptotal)
     end
@@ -270,7 +270,7 @@ end
 
 @testset "reporting accidents a callback-driven sampler can make are rejected" begin
     @testset "a step number past the end of a determinate phase" begin
-        c = MCMCProgress.Chain(1)
+        c = MCMCProgress.ChainProgress(1)
         reporter = PhaseReporter(c, "Warmup", 3)
         report!(reporter, 3)
         @test_throws "the phase \"Warmup\" runs for 3 iterations, so it cannot advance to 4" report!(

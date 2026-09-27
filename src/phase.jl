@@ -121,19 +121,18 @@ struct PhaseSnapshot{K<:PhaseKind,C<:Union{UInt64,Nothing}}
     position::Int
     opened::UInt64
     closed::C
-
-    function PhaseSnapshot(p::Phase{K}) where {K<:PhaseKind}
-        return lock(p.lock) do
-            closed = p.closed
-            new{K,typeof(closed)}(
-                objectid(p),
-                p.name,
-                p.kind,
-                (@atomic :monotonic p.position),
-                p.opened,
-                closed,
-            )
-        end
+end
+function PhaseSnapshot(p::Phase{K}) where {K<:PhaseKind}
+    return lock(p.lock) do
+        closed = p.closed
+        PhaseSnapshot{K,typeof(closed)}(
+            objectid(p),
+            p.name,
+            p.kind,
+            (@atomic :monotonic p.position),
+            p.opened,
+            closed,
+        )
     end
 end
 

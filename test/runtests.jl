@@ -15,11 +15,11 @@ using Dates: Dates
     end
 
     @testset "a run numbers its chains from one" begin
-        @test_throws "must be indexed 1:2" MCMCProgress.Run(
+        @test_throws "must be indexed 1:2" MCMCProgress.RunProgress(
             "Sampling mymodel",
             [MCMCProgress.Chain(2), MCMCProgress.Chain(1)],
         )
-        r = MCMCProgress.Run("Sampling mymodel", 3)
+        r = MCMCProgress.RunProgress("Sampling mymodel", 3)
         @test [ch.index for ch in r.chains] == [1, 2, 3]
     end
 
@@ -31,7 +31,7 @@ using Dates: Dates
     include("callback_sampler.jl")
 
     @testset "show methods for snapshot types" begin
-        r = MCMCProgress.Run("Sampling mymodel", 1)
+        r = MCMCProgress.RunProgress("Sampling mymodel", 1)
         c = r.chains[1]
         pd = MCMCProgress.Phase("Warmup", Determinate(1000))
         advance!(pd, 500)

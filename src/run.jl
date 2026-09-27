@@ -46,9 +46,8 @@ An immutable copy of a `RunProgress` at a given instant.
 struct RunSnapshot
     label::String
     chains::Tuple{Vararg{ChainSnapshot}}
-
-    RunSnapshot(r::RunProgress) = new(r.label, map(ChainSnapshot, r.chains))
 end
+RunSnapshot(r::RunProgress) = RunSnapshot(r.label, map(ChainSnapshot, r.chains))
 
 function Base.show(io::IO, r::RunSnapshot)
     print(io, "RunSnapshot(", repr(r.label), ", ", length(r.chains), " chain")
