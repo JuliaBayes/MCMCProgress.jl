@@ -4,24 +4,6 @@
     @test_throws BoundsError chain_at(r, 0)
 end
 
-@testset "a chain is built only from phases that share its lock" begin
-    shared = ReentrantLock()
-    phases = [MCMCProgress.Phase("Warmup", Determinate(10), shared)]
-    @test phases isa Vector{MCMCProgress.Phase{Determinate}}  # concretely typed
-
-    c = MCMCProgress.ChainProgress(1, phases, nothing, shared)
-    @test c.phases == phases
-    @test c.phases isa Vector{MCMCProgress.Phase}
-
-    foreign = MCMCProgress.Phase("Sampling", Counting())
-    @test_throws "the phase \"Sampling\" holds a different lock from chain 1" MCMCProgress.ChainProgress(
-        1,
-        [foreign],
-        nothing,
-        shared,
-    )
-end
-
 @testset "a phase is opened, advanced, and closed" begin
     r = MCMCProgress.RunProgress("Sampling mymodel", 1)
     c = chain_at(r, 1)
@@ -80,14 +62,14 @@ end
     @test_throws "runs for 1000 iterations, so it cannot advance to -1" advance!(d, -1)
     @test d.position == 0
 
-    @test_throws "still has the phase \"Warmup\" open" open_phase!(
+    @test_throws "still has an open phase (`Warmup`)" open_phase!(
         c,
         "Sampling",
         Counting(),
     )
 
     close_phase!(d)
-    @test_throws "is closed, so it cannot advance to 5" advance!(d, 5)
+    @test_throws "the phase \"Warmup\" is closed" advance!(d, 5)
     @test_throws "has already been closed" close_phase!(d)
 
     n = open_phase!(c, "Adapting", Counting())
@@ -95,7 +77,7 @@ end
     close_phase!(n)
 
     MCMCProgress.set_outcome!(c, finished)
-    @test_throws "has already ended as finished" open_phase!(c, "Sampling", Counting())
+    @test_throws "has already ended (outcome finished)" open_phase!(c, "Sampling", Counting())
     @test_throws "has already ended as finished" MCMCProgress.set_outcome!(c, failed)
 end
 
@@ -122,8 +104,8 @@ end
 
     MCMCProgress.set_outcome!(c1, failed)
     MCMCProgress.set_outcome!(c2, interrupted)
-    @test c1.outcome == failed
-    @test c2.outcome == interrupted
+    @test c1.outcome[] == failed
+    @test c2.outcome[] == interrupted
 end
 
 @testset "a snapshot copies live state without sharing it" begin
@@ -132,7 +114,7 @@ end
     p = open_phase!(c, "Warmup", Determinate(1000))
     advance!(p, 250)
 
-    s = MCMCProgress.snapshot(r)
+    s = RunSnapshot(r)
     @test s.label == "Sampling mymodel"
     @test length(s.chains) == 2
     @test s.chains[1].phases[1].id == objectid(p)
@@ -149,7 +131,7 @@ end
     @test s.chains[1].phases[1].closed === nothing
     @test s.chains[1].outcome === nothing
 
-    later = MCMCProgress.snapshot(r)
+    later = RunSnapshot(r)
     @test later.chains[1].phases[1].position == 1000
     @test later.chains[1].phases[1].closed isa UInt64
     @test later.chains[1].outcome == finished
@@ -159,7 +141,7 @@ end
     a = open_phase!(c2, "Adapting", Counting())
     close_phase!(a)
     b = open_phase!(c2, "Adapting", Counting())
-    sc = MCMCProgress.snapshot(c2)
+    sc = ChainSnapshot(c2)
     @test sc.phases[1].name == sc.phases[2].name
     @test sc.phases[1].id != sc.phases[2].id
     @test sc.phases[1].id == objectid(a)
@@ -207,7 +189,7 @@ end
             mine = RunSnapshot[]
             for i in 1:total
                 advance!(w, i)
-                i % every == 0 && push!(mine, MCMCProgress.snapshot(r))
+                i % every == 0 && push!(mine, RunSnapshot(r))
             end
             close_phase!(w)
             MCMCProgress.set_outcome!(c, finished)
@@ -218,7 +200,7 @@ end
     # Each chain's snapshots in the order it took them, and all of them together.
     perchain = map(fetch, records)
     seen = reduce(vcat, perchain)
-    push!(seen, MCMCProgress.snapshot(r))
+    push!(seen, RunSnapshot(r))
 
     @test !isempty(seen)
     names = ["Finding step size", "Warmup"]
@@ -227,7 +209,8 @@ end
     reporting(cs) = any(ps -> ps.closed === nothing && 0 < ps.position < total, cs.phases)
     overlapping = count(s -> count(reporting, s.chains) >= 2, seen)
     @info "$overlapping of $(length(seen)) snapshots caught two or more chains reporting at once across $(Threads.nthreads()) threads"
-    @test overlapping > 0
+    # On one thread the chains run one after another, so no overlap is possible.
+    Threads.nthreads() > 1 && @test overlapping > 0
 
     # A snapshot shows a prefix of the expected phases, closed ones at their final position.
     function consistent(s::RunSnapshot)

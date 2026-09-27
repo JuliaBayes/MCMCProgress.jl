@@ -243,7 +243,7 @@ function end_run!(
                 # One lock covers the read and the write, so a chain that recorded
                 # its own outcome keeps it.
                 lock(c.lock) do
-                    c.outcome === nothing && set_outcome!(c, outcome)
+                    c.outcome[] === nothing && set_outcome!(c, outcome)
                 end
             end,
         "stopping the refresh task" => () -> begin

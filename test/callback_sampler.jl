@@ -300,7 +300,7 @@ end
 
     @testset "a report into a phase the sampler has already left" begin
         backend = MCMCProgress.RecordingBackend()
-        @test_throws "the phase \"Warmup\" is closed, so it cannot advance to 8" progress(;
+        @test_throws "the phase \"Warmup\" is closed" progress(;
             label="Sampling mymodel",
             nchains=1,
             backend,
@@ -321,7 +321,7 @@ end
 
     @testset "a phase opened before the one in progress is closed" begin
         backend = MCMCProgress.RecordingBackend()
-        @test_throws "still has the phase \"Warmup\" open" progress(;
+        @test_throws "still has an open phase (`Warmup`)" progress(;
             label="Sampling mymodel",
             nchains=1,
             backend,

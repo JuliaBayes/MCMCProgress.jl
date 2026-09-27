@@ -99,9 +99,14 @@ A closed phase keeps the position it last reached and cannot be advanced or clos
 function close_phase!(p::Phase)
     lock(p.lock) do
         isopen(p) || throw(ArgumentError("the phase \"$(p.name)\" has already been closed"))
-        p.closed = time_ns()
-        @atomic :monotonic p.open = false
+        close!(p, time_ns())
     end
+    return p
+end
+
+function close!(p::Phase, at::UInt64)
+    p.closed = at
+    @atomic :monotonic p.open = false
     return p
 end
 

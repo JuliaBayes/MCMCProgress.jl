@@ -17,7 +17,7 @@ end
 
 run_snapshot(nchains::Integer) = RunSnapshot(
     "Sampling mymodel",
-    [ChainSnapshot(j, PhaseSnapshot[], nothing) for j in 1:nchains],
+    ntuple(j -> ChainSnapshot(j, (), nothing), nchains),
 )
 
 @testset "the run's label becomes the progress bar's title" begin
@@ -302,7 +302,7 @@ end
     # The refresh task has stopped, so teardown must draw the closing positions.
     drawn = loudly() do
         phase_closed(handle, 1, closed)
-        teardown(handle, RunSnapshot(rs0.label, [ChainSnapshot(1, [closed], finished)]))
+        teardown(handle, RunSnapshot(rs0.label, (ChainSnapshot(1, (closed,), finished),)))
     end
     @test occursin("50", drawn)
     @test occursin("100%", drawn)
@@ -333,10 +333,10 @@ end
             handle,
             RunSnapshot(
                 rs0.label,
-                [
-                    ChainSnapshot(1, [p1_closed], interrupted),
-                    ChainSnapshot(2, [p2_closed], interrupted),
-                ],
+                (
+                    ChainSnapshot(1, (p1_closed,), interrupted),
+                    ChainSnapshot(2, (p2_closed,), interrupted),
+                ),
             ),
         )
     end

@@ -40,10 +40,10 @@ end
     backend = MCMCProgress.ProgressLoggingBackend()
     rs0 = RunSnapshot(
         "Sampling mymodel",
-        [
-            ChainSnapshot(1, PhaseSnapshot[], nothing),
-            ChainSnapshot(2, PhaseSnapshot[], nothing),
-        ],
+        (
+            ChainSnapshot(1, (), nothing),
+            ChainSnapshot(2, (), nothing),
+        ),
     )
     handle = setup(backend, rs0)
     p = PhaseSnapshot(UInt(1), "Warmup", Determinate(4), 0, UInt64(0), nothing)
@@ -57,14 +57,14 @@ end
 
 @testset "a determinate phase reports a fraction; counting and binary report nothing" begin
     backend = MCMCProgress.ProgressLoggingBackend()
-    rs0 = RunSnapshot("Sampling mymodel", [ChainSnapshot(1, PhaseSnapshot[], nothing)])
+    rs0 = RunSnapshot("Sampling mymodel", (ChainSnapshot(1, (), nothing),))
     handle = setup(backend, rs0)
 
     det_open = PhaseSnapshot(UInt(1), "Warmup", Determinate(4), 0, UInt64(0), nothing)
     det_mid = PhaseSnapshot(UInt(1), "Warmup", Determinate(4), 2, UInt64(0), nothing)
     logs, _ = capture_progress_logs() do
         phase_opened(handle, 1, det_open)
-        refresh(handle, RunSnapshot(rs0.label, [ChainSnapshot(1, [det_mid], nothing)]))
+        refresh(handle, RunSnapshot(rs0.label, (ChainSnapshot(1, (det_mid,), nothing),)))
     end
     @test logs[1].kwargs[:progress] == 0.0
     @test logs[2].kwargs[:progress] == 0.5
@@ -81,7 +81,7 @@ end
 
 @testset "a closing phase reports \"done\"" begin
     backend = MCMCProgress.ProgressLoggingBackend()
-    rs0 = RunSnapshot("Sampling mymodel", [ChainSnapshot(1, PhaseSnapshot[], nothing)])
+    rs0 = RunSnapshot("Sampling mymodel", (ChainSnapshot(1, (), nothing),))
     handle = setup(backend, rs0)
     p_open = PhaseSnapshot(UInt(1), "Warmup", Binary(), 0, UInt64(0), nothing)
     p_closed = PhaseSnapshot(UInt(1), "Warmup", Binary(), 0, UInt64(0), UInt64(1))
@@ -96,7 +96,7 @@ end
 
 @testset "a fresh UUID per phase, distinct even when two phases share a name" begin
     backend = MCMCProgress.ProgressLoggingBackend()
-    rs0 = RunSnapshot("Sampling mymodel", [ChainSnapshot(1, PhaseSnapshot[], nothing)])
+    rs0 = RunSnapshot("Sampling mymodel", (ChainSnapshot(1, (), nothing),))
     handle = setup(backend, rs0)
     p1 = PhaseSnapshot(UInt(10), "Warmup", Counting(), 0, UInt64(0), nothing)
     p2 = PhaseSnapshot(UInt(20), "Warmup", Counting(), 0, UInt64(0), nothing)
