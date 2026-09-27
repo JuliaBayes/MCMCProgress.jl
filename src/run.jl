@@ -11,7 +11,10 @@ struct RunProgress{C<:Tuple{Vararg{ChainProgress}}}
     "The progress of each chain in the run."
     chains::C
 
-    RunProgress(label::String, nchains::Integer) = RunProgress(label, ntuple(i -> Chain(i), nchains))
+    function RunProgress(label::String, nchains::Integer)
+        chains = ntuple(i -> ChainProgress(i), nchains)
+        return new{typeof(chains)}(label, chains)
+    end
 end
 
 """
@@ -44,7 +47,7 @@ struct RunSnapshot
     label::String
     chains::Tuple{Vararg{ChainSnapshot}}
 
-    RunSnapshot(r::RunProgress) = RunSnapshot(r.label, map(ChainSnapshot, r.chains))
+    RunSnapshot(r::RunProgress) = new(r.label, map(ChainSnapshot, r.chains))
 end
 
 function Base.show(io::IO, r::RunSnapshot)

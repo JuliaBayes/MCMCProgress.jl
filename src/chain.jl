@@ -17,7 +17,7 @@ struct ChainProgress
     lock::ReentrantLock
 
     function ChainProgress(index::Int)
-        return new(index, Phase[], Ref(nothing), ReentrantLock())
+        return new(index, Phase[], Ref{Union{Outcome,Nothing}}(nothing), ReentrantLock())
     end
 end
 
@@ -87,7 +87,7 @@ struct ChainSnapshot
 
     function ChainSnapshot(c::ChainProgress)
         return lock(c.lock) do
-            ChainSnapshot(c.index, map(PhaseSnapshot, c.phases), c.outcome)
+            new(c.index, tuple(map(PhaseSnapshot, c.phases)...), c.outcome[])
         end
     end
 end

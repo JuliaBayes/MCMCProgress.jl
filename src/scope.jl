@@ -103,7 +103,7 @@ function refresh_loop(
             now = time_ns()
             now < deadline && sleep((deadline - now) / 1e9)
             stop[] && break
-            state = snapshot(run)
+            state = RunSnapshot(run)
             announce!(handle, state, announced)
             refresh(handle, state)
             deadline = next_deadline(deadline, period, time_ns())
@@ -194,7 +194,7 @@ function display_run(f, label::AbstractString, nchains::Integer, backend, period
         throw(ArgumentError("a refresh period must be positive, got $period nanoseconds"))
     run = RunProgress(label, nchains)
     # A failure in `setup` leaves nothing to finish off: there is no handle yet.
-    handle = setup(resolve_backend(backend), snapshot(run))
+    handle = setup(resolve_backend(backend), RunSnapshot(run))
     announced = Announced(length(run.chains))
     stop = Threads.Atomic{Bool}(false)
     task = spawn_refresh(run, handle, announced, period, stop)
@@ -256,11 +256,11 @@ function end_run!(
         "announcing the phases that closed as the run ended" =>
             () -> begin
                 require_stopped(task)
-                announce!(handle, snapshot(run), announced)
+                announce!(handle, RunSnapshot(run), announced)
             end,
         "tearing the backend down" => () -> begin
             require_stopped(task)
-            teardown(handle, snapshot(run))
+            teardown(handle, RunSnapshot(run))
         end,
     ]
     run_teardown_steps(steps, cause)
