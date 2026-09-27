@@ -63,7 +63,7 @@ end
 
 Equivalently, and perhaps more easily, you can iterate over all chains with the [`chains`](@ref) function.
 
-Finally, each `Chain` contains one or more [`Phase`](@ref) objects, which track the progress of individual phases of the MCMC algorithm (e.g. warmup, sampling, etc.).
+Finally, each `Chain` contains one or more `Phase` objects, which track the progress of individual phases of the MCMC algorithm (e.g. warmup, sampling, etc.).
 In the above example, you can see that each chain is initialised with an empty `Vector{Phase}`.
 
 We can add a new phase to a chain by calling the [`open_phase!`](@ref) function, update the progress of that phase by calling [`advance!`](@ref), and finally end it with [`close_phase!`](@ref).

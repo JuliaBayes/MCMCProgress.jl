@@ -1,7 +1,7 @@
 module MCMCProgress
 
 export Run, progress, Chain, chains, num_chains, chain_at
-export Phase, Determinate, Counting, Binary
+export Determinate, Counting, Binary
 export open_phase!, advance!, close_phase!
 export PlainTextBackend, ProgressLoggingBackend, TermBackend
 
