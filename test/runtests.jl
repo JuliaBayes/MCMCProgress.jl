@@ -1,4 +1,7 @@
 using MCMCProgress
+using MCMCProgress: finished, failed, interrupted
+using MCMCProgress: RunSnapshot, ChainSnapshot, PhaseSnapshot
+using MCMCProgress: setup, phase_opened, phase_closed, refresh, teardown, set_backend!
 using Test
 using ProgressLogging: ProgressLogging
 using Logging: Logging
