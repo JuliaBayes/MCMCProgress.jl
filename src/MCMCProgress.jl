@@ -1,5 +1,7 @@
 module MCMCProgress
 
+using DocStringExtensions: TYPEDFIELDS
+
 export Run, progress, Chain, chains, num_chains, chain_at
 export Determinate, Counting, Binary
 export open_phase!, advance!, close_phase!

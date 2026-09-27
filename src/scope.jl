@@ -91,7 +91,7 @@ end
 # A failure is logged as soon as it happens, because nobody waits on this task
 # until the run ends, and then rethrown so that the run reports it again there.
 function refresh_loop(
-    run::Run,
+    run::RunProgress,
     handle,
     announced::Announced,
     period::UInt64,
@@ -119,7 +119,7 @@ end
 # The refresh task runs on an interactive thread if the session has one, so
 # sampling work filling the default pool does not delay the display.
 function spawn_refresh(
-    run::Run,
+    run::RunProgress,
     handle,
     announced::Announced,
     period::UInt64,
@@ -192,7 +192,7 @@ progress(f; label::AbstractString, nchains::Integer, backend=nothing) =
 function display_run(f, label::AbstractString, nchains::Integer, backend, period::UInt64)
     period > 0 ||
         throw(ArgumentError("a refresh period must be positive, got $period nanoseconds"))
-    run = Run(label, nchains)
+    run = RunProgress(label, nchains)
     # A failure in `setup` leaves nothing to finish off: there is no handle yet.
     handle = setup(resolve_backend(backend), snapshot(run))
     announced = Announced(length(run.chains))
@@ -227,7 +227,7 @@ lands while waiting for it leaves it running; the backend is then not called
 again, and each call skipped is a failure in its own right.
 """
 function end_run!(
-    run::Run,
+    run::RunProgress,
     handle,
     announced::Announced,
     task::Task,

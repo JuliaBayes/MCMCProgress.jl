@@ -29,73 +29,43 @@
 """
     Phase{K<:PhaseKind}
 
-The live state of one phase on one chain: its name, kind, position, and the times
-it opened and closed. `closed` is `nothing` while the phase is still open, and
-`open` says the same thing in a form that can be read without the chain's lock.
-
-`Phase` is mutable, so two phases with the same name, such as a repeated
-adaptation phase, remain distinct objects. A `Binary` phase's position stays at
-zero.
-
-`lock` is the lock of the chain that owns the phase.
+The mutable state of one phase on one chain.
 """
 mutable struct Phase{K<:PhaseKind}
     name::String
     kind::K
+    "A representation of how far this phase has progressed. For `Determinate` and `Counting`
+    phases, it is the number of iterations completed. For a `Binary` phase, it is always
+    zero."
     @atomic position::Int
+    "The time the phase opened, in nanoseconds since some machine-specific arbitrary time in
+    the past (this is the output of `Base.time_ns`)."
     opened::UInt64
+    "The time the phase closed, or `nothing` if it is still open."
     closed::Union{UInt64,Nothing}
+    "Whether or not the phase is still open."
     @atomic open::Bool
+    "The lock of the chain that this phase belongs to."
     lock::ReentrantLock
 
-    Phase{K}(name, kind, position, opened, closed, lock) where {K<:PhaseKind} =
-        new{K}(name, kind, position, opened, closed, closed === nothing, lock)
+    Phase(name::String, kind::K, lock::ReentrantLock) where {K<:PhaseKind} =
+        new{K}(name, kind, 0, time_ns(), nothing, true, lock)
 end
-
-Phase(name::AbstractString, kind::PhaseKind, position, opened, closed, lock) =
-    Phase{typeof(kind)}(name, kind, position, opened, closed, lock)
-
-"""
-    Phase(name, kind::PhaseKind, [lock])
-
-Open a phase now: position starts at zero and the opening time is stamped with
-[`time_ns`](@ref), a monotonic clock unaffected by wall-clock adjustments. A phase given
-no lock gets one of its own; [`open_phase!`](@ref) passes the lock of the chain
-the phase joins.
-"""
-Phase(name::AbstractString, kind::PhaseKind, lock::ReentrantLock=ReentrantLock()) =
-    Phase(name, kind, 0, time_ns(), nothing, lock)
 
 """
     isopen(phase::Phase) -> Bool
 
-Whether `phase` is still open. Readable from any task without holding the
-chain's lock.
+Whether `phase` is still open.
 """
 Base.isopen(p::Phase) = @atomic :monotonic p.open
 
 """
-    advance!(phase::Phase, i::Integer)
+    advance!(phase::Phase, i::Int)
 
-Record that `phase` has reached position `i`. The position is absolute: `i`
-replaces the previous position rather than adding to it, so a duplicated or
-dropped report cannot make the position drift.
-
-This is a single atomic store and takes no lock, so it can be called on every
-iteration of a sampler.
-
-Throws if a `Determinate` phase would advance past its total, if the position is
-negative, or if the phase is closed. On a `Binary` phase, `advance!` does
-nothing and never throws.
-
-The closed check is best effort: a report racing with another task closing the
-phase, as the run's teardown does, may store one more position after the phase
-has closed. That position has passed the same range check as any other, so it is
-harmless, but no task can rely on the check to synchronise with the closing one.
+Record that `phase` has reached the absolute position `i`.
 """
-advance!(::Phase{Binary}, ::Integer) = nothing
-
-function advance!(p::Phase{Counting}, i::Integer)
+advance!(::Phase{Binary}, ::Int) = nothing
+function advance!(p::Phase{Counting}, i::Int)
     i >= 0 || throw(
         ArgumentError(
             "a position cannot be negative, so the phase \"$(p.name)\" cannot advance to $i",
@@ -103,8 +73,7 @@ function advance!(p::Phase{Counting}, i::Integer)
     )
     return set_position!(p, i)
 end
-
-function advance!(p::Phase{Determinate}, i::Integer)
+function advance!(p::Phase{Determinate}, i::Int)
     total = p.kind.total
     0 <= i <= total || throw(
         ArgumentError(
@@ -114,77 +83,57 @@ function advance!(p::Phase{Determinate}, i::Integer)
     return set_position!(p, i)
 end
 
-function set_position!(p::Phase, i::Integer)
-    isopen(p) || throw(
-        ArgumentError("the phase \"$(p.name)\" is closed, so it cannot advance to $i"),
-    )
-    @atomic :monotonic p.position = Int(i)
+function set_position!(p::Phase, i::Int)
+    isopen(p) || throw(ArgumentError("the phase \"$(p.name)\" is closed"))
+    @atomic :monotonic p.position = i
     return nothing
 end
 
 """
     close_phase!(phase::Phase) -> Phase
 
-Record that `phase` is over, stamping the closing time. A closed phase keeps the
-position it last reached and cannot be advanced or closed again.
+Record that `phase` is over.
+
+A closed phase keeps the position it last reached and cannot be advanced or closed again.
 """
 function close_phase!(p::Phase)
     lock(p.lock) do
         isopen(p) || throw(ArgumentError("the phase \"$(p.name)\" has already been closed"))
-        close!(p, time_ns())
+        p.closed = time_ns()
+        @atomic :monotonic p.open = false
     end
-    return p
-end
-
-# The caller holds the phase's lock, which publishes the closing time to a
-# snapshot. `open` is atomic because `advance!` reads it without that lock.
-function close!(p::Phase, at::UInt64)
-    p.closed = at
-    @atomic :monotonic p.open = false
     return p
 end
 
 """
     PhaseSnapshot{K<:PhaseKind}
 
-An immutable copy of a phase's state at one instant: an `id`, and the name,
-kind, position, opening time and closing time a live [`Phase`](@ref) carries.
-Holds no reference back into live state.
+An immutable copy of a phase's state at one instant.
 
-Two phases on one chain may share a name, as when a sampler revisits adaptation,
-so `id` is what tells them apart.
+On top of all the information already present in the `Phase`, we need to additionally track
+the `objectid` of the phase in order to disambiguate phases which have the same name and
+kind.
 """
-struct PhaseSnapshot{K<:PhaseKind}
+struct PhaseSnapshot{K<:PhaseKind,C<:Union{UInt64,Nothing}}
     id::UInt
     name::String
     kind::K
     position::Int
     opened::UInt64
-    closed::Union{UInt64,Nothing}
+    closed::C
 
-    PhaseSnapshot{K}(id, name, kind, position, opened, closed) where {K<:PhaseKind} =
-        new{K}(id, name, kind, position, opened, closed)
-end
-
-PhaseSnapshot(id, name::AbstractString, kind::PhaseKind, position, opened, closed) =
-    PhaseSnapshot{typeof(kind)}(id, name, kind, position, opened, closed)
-
-"""
-    snapshot(p::Phase) -> PhaseSnapshot
-
-Copy the state of `p` into a `PhaseSnapshot`. The closing time is read while the
-chain's lock is held, so a closed phase's snapshot carries its final position.
-"""
-function snapshot(p::Phase)
-    return lock(p.lock) do
-        PhaseSnapshot(
-            objectid(p),
-            p.name,
-            p.kind,
-            (@atomic :monotonic p.position),
-            p.opened,
-            p.closed,
-        )
+    function PhaseSnapshot(p::Phase{K}) where {K<:PhaseKind}
+        return lock(p.lock) do
+            closed = p.closed
+            new{K,typeof(closed)}(
+                objectid(p),
+                p.name,
+                p.kind,
+                (@atomic :monotonic p.position),
+                p.opened,
+                closed,
+            )
+        end
     end
 end
 
