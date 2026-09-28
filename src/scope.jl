@@ -135,19 +135,19 @@ end
 Display the progress of a run of `nchains` chains called `label` while `f(run)`
 samples, and return whatever `f` returns.
 
-`f` is handed the run to report on: [`chain`](@ref) reaches one of its chains,
+`f` is handed the run to report on: [`chain_at`](@ref) reaches one of its chains,
 and [`open_phase!`](@ref), [`advance!`](@ref) and [`close_phase!`](@ref) report
 that chain's progress. Chains may run on separate tasks, each reporting on its
 own.
 
 `backend` selects the display. If it is omitted, the default set by
-[`set_backend!`](@ref) is used, or [`PlainTextBackend`](@ref) if none is set.
+`set_backend!` is used, or [`PlainTextBackend`](@ref) if none is set.
 
-A separate task refreshes the backend every [`REFRESH_PERIOD`](@ref)
+A separate task refreshes the backend every `REFRESH_PERIOD`
 nanoseconds. Recording a position never waits for the display.
 
 However `f` ends, any phase left open is closed, every chain still running is
-given an outcome, the refresh task stops, and the backend's [`teardown`](@ref)
+given an outcome, the refresh task stops, and the backend's `teardown`
 is called, which is where a terminal display restores the cursor. An exception
 from `f` is rethrown unchanged and ends the chains still running as `failed`, or
 as `interrupted` for an `InterruptException`.
