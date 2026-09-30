@@ -91,7 +91,7 @@ end
 # A failure is logged as soon as it happens, because nobody waits on this task
 # until the run ends, and then rethrown so that the run reports it again there.
 function refresh_loop(
-    run::Run,
+    run::RunProgress,
     handle,
     announced::Announced,
     period::UInt64,
@@ -103,7 +103,7 @@ function refresh_loop(
             now = time_ns()
             now < deadline && sleep((deadline - now) / 1e9)
             stop[] && break
-            state = snapshot(run)
+            state = RunSnapshot(run)
             announce!(handle, state, announced)
             refresh(handle, state)
             deadline = next_deadline(deadline, period, time_ns())
@@ -119,7 +119,7 @@ end
 # The refresh task runs on an interactive thread if the session has one, so
 # sampling work filling the default pool does not delay the display.
 function spawn_refresh(
-    run::Run,
+    run::RunProgress,
     handle,
     announced::Announced,
     period::UInt64,
@@ -192,9 +192,9 @@ progress(f; label::AbstractString, nchains::Integer, backend=nothing) =
 function display_run(f, label::AbstractString, nchains::Integer, backend, period::UInt64)
     period > 0 ||
         throw(ArgumentError("a refresh period must be positive, got $period nanoseconds"))
-    run = Run(label, nchains)
+    run = RunProgress(label, nchains)
     # A failure in `setup` leaves nothing to finish off: there is no handle yet.
-    handle = setup(resolve_backend(backend), snapshot(run))
+    handle = setup(resolve_backend(backend), RunSnapshot(run))
     announced = Announced(length(run.chains))
     stop = Threads.Atomic{Bool}(false)
     task = spawn_refresh(run, handle, announced, period, stop)
@@ -227,7 +227,7 @@ lands while waiting for it leaves it running; the backend is then not called
 again, and each call skipped is a failure in its own right.
 """
 function end_run!(
-    run::Run,
+    run::RunProgress,
     handle,
     announced::Announced,
     task::Task,
@@ -243,7 +243,7 @@ function end_run!(
                 # One lock covers the read and the write, so a chain that recorded
                 # its own outcome keeps it.
                 lock(c.lock) do
-                    c.outcome === nothing && set_outcome!(c, outcome)
+                    c.outcome[] === nothing && set_outcome!(c, outcome)
                 end
             end,
         "stopping the refresh task" => () -> begin
@@ -256,11 +256,11 @@ function end_run!(
         "announcing the phases that closed as the run ended" =>
             () -> begin
                 require_stopped(task)
-                announce!(handle, snapshot(run), announced)
+                announce!(handle, RunSnapshot(run), announced)
             end,
         "tearing the backend down" => () -> begin
             require_stopped(task)
-            teardown(handle, snapshot(run))
+            teardown(handle, RunSnapshot(run))
         end,
     ]
     run_teardown_steps(steps, cause)

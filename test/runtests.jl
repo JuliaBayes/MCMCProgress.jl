@@ -15,11 +15,7 @@ using Dates: Dates
     end
 
     @testset "a run numbers its chains from one" begin
-        @test_throws "must be indexed 1:2" MCMCProgress.Run(
-            "Sampling mymodel",
-            [MCMCProgress.Chain(2), MCMCProgress.Chain(1)],
-        )
-        r = MCMCProgress.Run("Sampling mymodel", 3)
+        r = MCMCProgress.RunProgress("Sampling mymodel", 3)
         @test [ch.index for ch in r.chains] == [1, 2, 3]
     end
 
@@ -31,13 +27,13 @@ using Dates: Dates
     include("callback_sampler.jl")
 
     @testset "show methods for snapshot types" begin
-        r = MCMCProgress.Run("Sampling mymodel", 1)
+        r = MCMCProgress.RunProgress("Sampling mymodel", 1)
         c = r.chains[1]
-        pd = MCMCProgress.Phase("Warmup", Determinate(1000))
+        pd = MCMCProgress.Phase("Warmup", Determinate(1000), ReentrantLock())
         advance!(pd, 500)
-        pc = MCMCProgress.Phase("Adapting", Counting())
+        pc = MCMCProgress.Phase("Adapting", Counting(), ReentrantLock())
         advance!(pc, 7)
-        pb = MCMCProgress.Phase("Finding step size", Binary())
+        pb = MCMCProgress.Phase("Finding step size", Binary(), ReentrantLock())
         push!(c.phases, pd)
         push!(c.phases, pc)
         push!(c.phases, pb)
@@ -48,8 +44,8 @@ using Dates: Dates
             PhaseSnapshot(objectid(pc), pc.name, pc.kind, pc.position, pc.opened, pc.closed)
         psb =
             PhaseSnapshot(objectid(pb), pb.name, pb.kind, pb.position, pb.opened, pb.closed)
-        cs = ChainSnapshot(c.index, [psd, psc, psb], nothing)
-        rs = RunSnapshot(r.label, [cs])
+        cs = ChainSnapshot(c.index, (psd, psc, psb), nothing)
+        rs = RunSnapshot(r.label, (cs,))
 
         @test occursin("500/1000", sprint(show, psd))
         @test occursin("7", sprint(show, psc))
@@ -69,7 +65,7 @@ using Dates: Dates
         if !isdefined(@__MODULE__, :NoOpTestBackend)
             struct NoOpTestBackend end
         end
-        p = MCMCProgress.Phase("Warmup", Determinate(10))
+        p = MCMCProgress.Phase("Warmup", Determinate(10), ReentrantLock())
         ps = PhaseSnapshot(objectid(p), p.name, p.kind, p.position, p.opened, p.closed)
         @test MCMCProgress.phase_opened(NoOpTestBackend(), 1, ps) === nothing
         @test MCMCProgress.phase_closed(NoOpTestBackend(), 1, ps) === nothing

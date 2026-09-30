@@ -4,10 +4,10 @@
     backend = PlainTextBackend(io; now=() -> clk[])
     rs0 = RunSnapshot(
         "Sampling mymodel",
-        [
-            ChainSnapshot(1, PhaseSnapshot[], nothing),
-            ChainSnapshot(2, PhaseSnapshot[], nothing),
-        ],
+        (
+            ChainSnapshot(1, (), nothing),
+            ChainSnapshot(2, (), nothing),
+        ),
     )
     handle = setup(backend, rs0)
 
@@ -21,7 +21,7 @@
         PhaseSnapshot(UInt(1), "Warmup", Determinate(1000), 250, UInt64(0), nothing)
     refresh(
         handle,
-        RunSnapshot(rs0.label, (ChainSnapshot(1, [warmup_mid], nothing), rs0.chains[2])),
+        RunSnapshot(rs0.label, (ChainSnapshot(1, (warmup_mid,), nothing), rs0.chains[2])),
     )
     warmup_closed = PhaseSnapshot(
         UInt(1),
@@ -72,7 +72,7 @@ end
     # The buckets are five percentage points wide: 0, 5, 10, … 100.
     io = IOBuffer()
     backend = PlainTextBackend(io)
-    rs0 = RunSnapshot("Sampling mymodel", [ChainSnapshot(1, PhaseSnapshot[], nothing)])
+    rs0 = RunSnapshot("Sampling mymodel", (ChainSnapshot(1, (), nothing),))
     handle = setup(backend, rs0)
     opened_at = UInt64(0)
     phase_opened(
@@ -85,7 +85,7 @@ end
     for i in 1:4
         cs = ChainSnapshot(
             1,
-            [PhaseSnapshot(UInt(1), "Warmup", Determinate(100), i, opened_at, nothing)],
+            (PhaseSnapshot(UInt(1), "Warmup", Determinate(100), i, opened_at, nothing),),
             nothing,
         )
         refresh(handle, RunSnapshot(rs0.label, (cs,)))
@@ -95,7 +95,7 @@ end
     # 5% crosses into the next bucket: a new line is written.
     cs5 = ChainSnapshot(
         1,
-        [PhaseSnapshot(UInt(1), "Warmup", Determinate(100), 5, opened_at, nothing)],
+        (PhaseSnapshot(UInt(1), "Warmup", Determinate(100), 5, opened_at, nothing),),
         nothing,
     )
     refresh(handle, RunSnapshot(rs0.label, (cs5,)))
@@ -107,7 +107,7 @@ end
     # percentage.
     io = IOBuffer()
     backend = PlainTextBackend(io)
-    rs0 = RunSnapshot("Sampling mymodel", [ChainSnapshot(1, PhaseSnapshot[], nothing)])
+    rs0 = RunSnapshot("Sampling mymodel", (ChainSnapshot(1, (), nothing),))
     handle = setup(backend, rs0)
     opened_at = UInt64(0)
     phase_opened(
@@ -120,7 +120,7 @@ end
     for i in 1:99
         cs = ChainSnapshot(
             1,
-            [PhaseSnapshot(UInt(1), "Adapting", Counting(), i, opened_at, nothing)],
+            (PhaseSnapshot(UInt(1), "Adapting", Counting(), i, opened_at, nothing),),
             nothing,
         )
         refresh(handle, RunSnapshot(rs0.label, (cs,)))
@@ -130,7 +130,7 @@ end
     # 100 crosses into the next step: a new line is written.
     cs100 = ChainSnapshot(
         1,
-        [PhaseSnapshot(UInt(1), "Adapting", Counting(), 100, opened_at, nothing)],
+        (PhaseSnapshot(UInt(1), "Adapting", Counting(), 100, opened_at, nothing),),
         nothing,
     )
     refresh(handle, RunSnapshot(rs0.label, (cs100,)))
@@ -140,7 +140,7 @@ end
 @testset "refresh writes nothing further for a binary phase until it closes" begin
     io = IOBuffer()
     backend = PlainTextBackend(io)
-    rs0 = RunSnapshot("Sampling mymodel", [ChainSnapshot(1, PhaseSnapshot[], nothing)])
+    rs0 = RunSnapshot("Sampling mymodel", (ChainSnapshot(1, (), nothing),))
     handle = setup(backend, rs0)
     opened_at = UInt64(0)
     phase_opened(
@@ -152,7 +152,7 @@ end
     for _ in 1:5
         cs = ChainSnapshot(
             1,
-            [PhaseSnapshot(UInt(1), "Finding step size", Binary(), 0, opened_at, nothing)],
+            (PhaseSnapshot(UInt(1), "Finding step size", Binary(), 0, opened_at, nothing),),
             nothing,
         )
         refresh(handle, RunSnapshot(rs0.label, (cs,)))
@@ -175,7 +175,7 @@ end
     io = IOBuffer()
     clk = Ref(UInt64(0))
     backend = PlainTextBackend(io; now=() -> clk[])
-    rs0 = RunSnapshot("Sampling mymodel", [ChainSnapshot(1, PhaseSnapshot[], nothing)])
+    rs0 = RunSnapshot("Sampling mymodel", (ChainSnapshot(1, (), nothing),))
     handle = setup(backend, rs0)
 
     total = 10_000
@@ -189,7 +189,7 @@ end
         clk[] = opened_at + UInt64(i) * UInt64(100_000)
         cs = ChainSnapshot(
             1,
-            [PhaseSnapshot(UInt(1), "Adapting", Counting(), i, opened_at, nothing)],
+            (PhaseSnapshot(UInt(1), "Adapting", Counting(), i, opened_at, nothing),),
             nothing,
         )
         refresh(handle, RunSnapshot(rs0.label, (cs,)))
@@ -212,7 +212,7 @@ end
 @testset "a counting phase that stops short of the next multiple of a hundred still gets its closing line with its true final position" begin
     io = IOBuffer()
     backend = PlainTextBackend(io)
-    rs0 = RunSnapshot("Sampling mymodel", [ChainSnapshot(1, PhaseSnapshot[], nothing)])
+    rs0 = RunSnapshot("Sampling mymodel", (ChainSnapshot(1, (), nothing),))
     handle = setup(backend, rs0)
     opened_at = UInt64(0)
     phase_opened(
@@ -236,7 +236,7 @@ end
     io = IOBuffer()
     clk = Ref(UInt64(0))
     backend = PlainTextBackend(io; now=() -> clk[])
-    rs0 = RunSnapshot("Sampling mymodel", [ChainSnapshot(1, PhaseSnapshot[], nothing)])
+    rs0 = RunSnapshot("Sampling mymodel", (ChainSnapshot(1, (), nothing),))
     handle = setup(backend, rs0)
 
     total = 10_000
@@ -250,7 +250,7 @@ end
         clk[] = opened_at + UInt64(i) * UInt64(100_000)
         cs = ChainSnapshot(
             1,
-            [PhaseSnapshot(UInt(1), "Sampling", Determinate(total), i, opened_at, nothing)],
+            (PhaseSnapshot(UInt(1), "Sampling", Determinate(total), i, opened_at, nothing),),
             nothing,
         )
         refresh(handle, RunSnapshot(rs0.label, (cs,)))
@@ -270,7 +270,7 @@ end
     build_lines = function (io)
         clk = Ref(UInt64(0))
         backend = PlainTextBackend(io; now=() -> clk[])
-        rs0 = RunSnapshot("Sampling mymodel", [ChainSnapshot(1, PhaseSnapshot[], nothing)])
+        rs0 = RunSnapshot("Sampling mymodel", (ChainSnapshot(1, (), nothing),))
         handle = setup(backend, rs0)
         phase_opened(
             handle,
@@ -280,7 +280,7 @@ end
         clk[] = UInt64(1_000_000_000)
         cs = ChainSnapshot(
             1,
-            [PhaseSnapshot(UInt(1), "Warmup", Determinate(10), 5, UInt64(0), nothing)],
+            (PhaseSnapshot(UInt(1), "Warmup", Determinate(10), 5, UInt64(0), nothing),),
             nothing,
         )
         refresh(handle, RunSnapshot(rs0.label, (cs,)))
@@ -293,7 +293,7 @@ end
             UInt64(2_000_000_000),
         )
         phase_closed(handle, 1, closed)
-        teardown(handle, RunSnapshot(rs0.label, (ChainSnapshot(1, [closed], finished),)))
+        teardown(handle, RunSnapshot(rs0.label, (ChainSnapshot(1, (closed,), finished),)))
         return nothing
     end
 
@@ -315,7 +315,7 @@ end
     for outcome in (failed, interrupted)
         io = IOBuffer()
         backend = PlainTextBackend(io)
-        rs0 = RunSnapshot("Sampling mymodel", [ChainSnapshot(1, PhaseSnapshot[], nothing)])
+        rs0 = RunSnapshot("Sampling mymodel", (ChainSnapshot(1, (), nothing),))
         handle = setup(backend, rs0)
         p = PhaseSnapshot(
             UInt(1),
@@ -326,7 +326,7 @@ end
             UInt64(1_000_000_000),
         )
         phase_closed(handle, 1, p)
-        teardown(handle, RunSnapshot(rs0.label, (ChainSnapshot(1, [p], outcome),)))
+        teardown(handle, RunSnapshot(rs0.label, (ChainSnapshot(1, (p,), outcome),)))
 
         @test occursin(string(outcome), String(take!(io)))
     end
@@ -336,7 +336,7 @@ end
     io = IOBuffer()
     clk = Ref(UInt64(0))
     backend = PlainTextBackend(io; now=() -> clk[])
-    rs0 = RunSnapshot("Sampling mymodel", [ChainSnapshot(1, PhaseSnapshot[], nothing)])
+    rs0 = RunSnapshot("Sampling mymodel", (ChainSnapshot(1, (), nothing),))
     handle = setup(backend, rs0)
 
     phase_opened(
@@ -347,7 +347,7 @@ end
     clk[] = UInt64(500_000_000)
     cs = ChainSnapshot(
         1,
-        [PhaseSnapshot(UInt(1), "Warmup", Determinate(10), 6, UInt64(0), nothing)],
+        (PhaseSnapshot(UInt(1), "Warmup", Determinate(10), 6, UInt64(0), nothing),),
         nothing,
     )
     refresh(handle, RunSnapshot(rs0.label, (cs,)))
@@ -360,7 +360,7 @@ end
         UInt64(1_000_000_000),
     )
     phase_closed(handle, 1, closed)
-    teardown(handle, RunSnapshot(rs0.label, (ChainSnapshot(1, [closed], failed),)))
+    teardown(handle, RunSnapshot(rs0.label, (ChainSnapshot(1, (closed,), failed),)))
 
     out = String(take!(io))
     @test !occursin('\e', out)

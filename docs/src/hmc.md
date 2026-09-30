@@ -35,7 +35,7 @@ end
 
 Before we implement the actual sampling loop, it's worth describing how MCMCProgress works.
 
-The central object in MCMCProgress is a [`Run`](@ref) object, which tracks the overall status of some MCMC run.
+The central object in MCMCProgress is a [`RunProgress`](@ref) object, which tracks the overall status of some MCMC run.
 You can initialise one by calling the [`progress`](@ref) function:
 
 ```@example hmc
@@ -48,8 +48,8 @@ end
 
 Our sampling loop will be placed inside this `do` block, and will send updates to `run` as it progresses.
 
-Each `Run` contains one or more [`Chain`](@ref) objects, which track the progress of individual MCMC chains.
-You can access a specific `Chain` by calling the [`chain_at`](@ref) function:
+Each `RunProgress` contains one or more [`ChainProgress`](@ref) objects, which track the progress of individual MCMC chains.
+You can access a specific `ChainProgress` by calling the [`chain_at`](@ref) function:
 
 ```@example hmc
 progress(; label="HMC", nchains=4, backend=PlainTextBackend()) do run
@@ -63,7 +63,7 @@ end
 
 Equivalently, and perhaps more easily, you can iterate over all chains with the [`chains`](@ref) function.
 
-Finally, each `Chain` contains one or more `Phase` objects, which track the progress of individual phases of the MCMC algorithm (e.g. warmup, sampling, etc.).
+Finally, each `ChainProgress` contains one or more `Phase` objects, which track the progress of individual phases of the MCMC algorithm (e.g. warmup, sampling, etc.).
 In the above example, you can see that each chain is initialised with an empty `Vector{Phase}`.
 
 We can add a new phase to a chain by calling the [`open_phase!`](@ref) function, update the progress of that phase by calling [`advance!`](@ref), and finally end it with [`close_phase!`](@ref).
