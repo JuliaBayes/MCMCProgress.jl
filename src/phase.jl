@@ -94,7 +94,7 @@ end
 
 Record that `phase` is over.
 
-A closed phase keeps the position it last reached and cannot be advanced or closed again.
+Closing a phase records its final position, and prevents it from being advanced or closed again.
 """
 function close_phase!(p::Phase)
     lock(p.lock) do
