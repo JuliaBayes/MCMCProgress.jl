@@ -11,7 +11,7 @@ TerminalLoggers = "5d786b92-1e48-4d6f-9151-6b4477ca9bed"
 MCMCProgress = {path = ".."}
 
 [compat]
-DocumenterCodeBlocks = "1.5.1"
+DocumenterCodeBlocks = "1"
 ProgressLogging = "0.1.6"
 Term = "2.2"
 TerminalLoggers = "0.1"
