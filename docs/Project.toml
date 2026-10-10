@@ -12,6 +12,7 @@ MCMCProgress = {path = ".."}
 
 [compat]
 Documenter = "1"
+DocumenterCodeBlocks = "1"
 ProgressLogging = "0.1.6"
 Term = "2.2"
 TerminalLoggers = "0.1"
