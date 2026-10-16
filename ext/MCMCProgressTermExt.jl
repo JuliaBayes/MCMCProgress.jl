@@ -16,6 +16,8 @@ using Term.Progress:
     PercentageColumn,
     ETAColumn
 
+MCMCProgress.is_loaded(::TermBackend) = true
+
 """
     _DEFAULT_COLUMNS
 

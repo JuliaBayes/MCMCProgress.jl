@@ -7,6 +7,8 @@ using ProgressLogging: ProgressLevel
 using Logging: @logmsg
 using UUIDs: UUID, uuid4
 
+MCMCProgress.is_loaded(::ProgressLoggingBackend) = true
+
 """
     ProgressLoggingHandle
 
