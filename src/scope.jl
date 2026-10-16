@@ -142,6 +142,9 @@ own.
 
 `backend` selects the display. If it is omitted, the default set by
 `set_backend!` is used, or [`PlainTextBackend`](@ref) if none is set.
+Pass `backend=(a, b)` to use multiple displays. Callbacks run in tuple order.
+Setup failure cleans up displays already started. Teardown attempts every display.
+Callback failures stop refresh for the group.
 
 A separate task refreshes the backend every `REFRESH_PERIOD`
 nanoseconds. Recording a position never waits for the display.
