@@ -36,7 +36,7 @@ end
           "ProgressLogging"
 end
 
-@testset "a record's name carries the chain index and the phase name" begin
+@testset "a record's name carries the chain index, total and phase name" begin
     backend = MCMCProgress.ProgressLoggingBackend()
     rs0 = RunSnapshot(
         "Sampling mymodel",
@@ -51,8 +51,7 @@ end
     logs, _ = capture_progress_logs() do
         phase_opened(handle, 2, p)
     end
-    @test occursin("2", string(logs[1].message))
-    @test occursin("Warmup", string(logs[1].message))
+    @test logs[1].message == "chain 2/2: Warmup"
 end
 
 @testset "a determinate phase reports a fraction; counting and binary report nothing" begin
