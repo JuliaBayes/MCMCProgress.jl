@@ -76,6 +76,8 @@ inside [`setup`](@ref).
 """
 backend_package(::Any) = nothing
 
+_check_backend_loaded(backends::Tuple) = (foreach(_check_backend_loaded, backends); backends)
+
 function _check_backend_loaded(backend)
     hasmethod(setup, Tuple{typeof(backend),RunSnapshot}) && return backend
     pkg = backend_package(backend)
@@ -143,3 +145,34 @@ function resolve_backend(explicit=nothing)
     _check_backend_loaded(backend)
     return backend
 end
+
+# Keep custom backends' tuple-valued handles separate from composed handles.
+struct BackendHandles{T<:Tuple}
+    handles::T
+end
+
+setup(backends::Tuple, snapshot::RunSnapshot) = BackendHandles(_setup_backends(backends, snapshot))
+
+function _setup_backends(backends::Tuple, snapshot::RunSnapshot)
+    isempty(backends) && return ()
+    handle = setup(first(backends), snapshot)
+    rest = try
+        _setup_backends(Base.tail(backends), snapshot)
+    catch exception
+        steps = ["cleaning up a backend after setup failed" => () -> teardown(handle, snapshot)]
+        run_teardown_steps(steps, exception)
+        rethrow()
+    end
+    return (handle, rest...)
+end
+
+phase_opened(group::BackendHandles, i::Integer, phase::PhaseSnapshot) =
+    foreach(handle -> phase_opened(handle, i, phase), group.handles)
+phase_closed(group::BackendHandles, i::Integer, phase::PhaseSnapshot) =
+    foreach(handle -> phase_closed(handle, i, phase), group.handles)
+refresh(group::BackendHandles, snapshot::RunSnapshot) =
+    foreach(handle -> refresh(handle, snapshot), group.handles)
+teardown(group::BackendHandles, snapshot::RunSnapshot) = run_teardown_steps(
+    ["tearing down backend $i" => () -> teardown(handle, snapshot) for (i, handle) in pairs(group.handles)],
+    nothing,
+)
