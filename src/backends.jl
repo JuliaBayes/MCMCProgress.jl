@@ -79,9 +79,8 @@ backend_package(::Any) = nothing
 """
     is_loaded(backend) -> Bool
 
-Whether the extension required by `backend` is loaded. Backends that need no
-extension return `true`. An extension overrides this method to return `true`
-for its backend when loaded.
+Returns `true` if the extension for `backend` is loaded or if `backend`
+doesn't require an extension.
 """
 is_loaded(backend) = backend_package(backend) === nothing
 
@@ -90,7 +89,7 @@ function _check_backend_loaded(backend)
     pkg = backend_package(backend)
     throw(
         ArgumentError(
-            "the $(typeof(backend)) backend needs its extension loaded: run `using $pkg` first",
+            "extension for $(typeof(backend)) missing; load it with `using $pkg`",
         ),
     )
 end
