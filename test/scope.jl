@@ -38,7 +38,7 @@ refresh_times(backend::ClockBackend) = lock(() -> copy(backend.times), backend.l
     FailingBackend(failing::Symbol)
 
 Records the name of every call in `calls`, and throws from the call named
-`failing`: one of `:refresh`, `:phase_closed` or `:teardown`.
+`failing`: one of `:setup`, `:refresh`, `:phase_closed` or `:teardown`.
 """
 mutable struct FailingBackend
     calls::Vector{Symbol}
@@ -49,6 +49,7 @@ FailingBackend(failing::Symbol) = FailingBackend(Symbol[], failing)
 
 function MCMCProgress.setup(backend::FailingBackend, ::RunSnapshot)
     push!(backend.calls, :setup)
+    backend.failing === :setup && error("this backend cannot set up")
     return backend
 end
 
@@ -141,7 +142,8 @@ middling(xs) = sort(xs)[(length(xs)+1)÷2]
 
 @testset "progress drives a backend from setup to teardown" begin
     backend = MCMCProgress.RecordingBackend()
-    result = progress(; label="Sampling mymodel", nchains=2, backend=backend) do run
+    second = MCMCProgress.RecordingBackend()
+    result = progress(; label="Sampling mymodel", nchains=2, backend=(backend, second)) do run
         c = chain_at(run, 1)
         p = open_phase!(c, "Warmup", Determinate(10))
         advance!(p, 10)
@@ -150,6 +152,7 @@ middling(xs) = sort(xs)[(length(xs)+1)÷2]
     end
 
     @test result === :sampled  # progress hands back whatever the body returns
+    @test backend.calls == second.calls
 
     names = call_names(backend)
     @test first(names) === :setup
@@ -329,10 +332,12 @@ end
 
     @testset "a backend that cannot tear down" begin
         backend = FailingBackend(:teardown)
-        @test_throws "this backend cannot tear down" quick_run(backend) do run
+        second = MCMCProgress.RecordingBackend()
+        @test_throws "this backend cannot tear down" quick_run((backend, second)) do run
             nothing
         end
         @test :teardown in backend.calls
+        @test call_names(second) == [:setup, :teardown]
     end
 end
 
@@ -559,4 +564,18 @@ end
         @test opened == ["Finding step size", "Warmup"]
         @test closed == ["Finding step size", "Warmup"]
     end
+end
+
+@testset "multiple backends receive refresh" begin
+    first, second = MCMCProgress.RecordingBackend(), MCMCProgress.RecordingBackend()
+    snapshot = RunSnapshot(MCMCProgress.RunProgress("test", 1))
+    refresh(setup((first, second), snapshot), snapshot)
+    @test call_names(first) == call_names(second) == [:setup, :refresh]
+end
+
+@testset "failed setup cleans up started backends" begin
+    first, last = MCMCProgress.RecordingBackend(), MCMCProgress.RecordingBackend()
+    @test_throws ErrorException quick_run(_ -> nothing, (first, FailingBackend(:setup), last))
+    @test call_names(first) == [:setup, :teardown]
+    @test isempty(last.calls)
 end

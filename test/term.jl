@@ -38,6 +38,7 @@ end
     end
     @test length(handle.pbar.jobs) == 3
     @test Set(keys(handle.jobs)) == Set(1:3)
+    @test [handle.jobs[j].description for j in 1:3] == ["chain $j/3" for j in 1:3]
 
     # Term scrolls the terminal for every job added to a running bar, so the
     # number of jobs must not change as chains move between phases.
@@ -118,10 +119,10 @@ end
     # Chains 2 to 4 are still in warmup. Removing jobs per phase would delete the
     # wrong bar, since Term derives a job's `id` from the number of jobs.
     for j in 2:4
-        @test handle.jobs[j].description == "chain $j · Warmup"
+        @test handle.jobs[j].description == "chain $j/4: Warmup"
         @test handle.jobs[j].N == 40
     end
-    @test handle.jobs[1].description == "chain 1 · Sampling"
+    @test handle.jobs[1].description == "chain 1/4: Sampling"
     @test length(handle.pbar.jobs) == 4
 
     quietly() do
@@ -140,7 +141,7 @@ end
         phase_opened(handle, 1, det)
     end
     job = handle.jobs[1]
-    @test job.description == "chain 1 · Warmup"
+    @test job.description == "chain 1/1: Warmup"
     @test job.N == 500
     # A determinate phase gets a bar column; phases with no total get a spinner.
     @test any(c -> c isa Term.Progress.ProgressColumn, job.columns)

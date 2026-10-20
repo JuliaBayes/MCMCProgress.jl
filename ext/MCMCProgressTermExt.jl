@@ -51,11 +51,12 @@ _total(::PhaseSnapshot) = nothing
 
 # A bar has no other place to show its chain, so the description carries the
 # chain index.
-_description(chain_index::Integer) = "chain $chain_index"
+_description(chain_index::Integer, nchains::Integer) = "chain $chain_index/$nchains"
 _description(
     chain_index::Integer,
+    nchains::Integer,
     phase::PhaseSnapshot,
-) = "chain $chain_index · $(phase.name)"
+) = "chain $chain_index/$nchains: $(phase.name)"
 
 """
     TermHandle
@@ -90,7 +91,8 @@ function setup(backend::TermBackend, snapshot::RunSnapshot)
     jobs = Dict{Int,ProgressJob}()
     for chain in snapshot.chains
         pbar.columns = copy(template_columns)
-        jobs[chain.index] = addjob!(pbar; description=_description(chain.index))
+        jobs[chain.index] =
+            addjob!(pbar; description=_description(chain.index, length(snapshot.chains)))
     end
     # Starting the bar after adding its jobs reserves room for all of them at
     # once; a job added to a running bar scrolls the terminal.
@@ -117,7 +119,7 @@ phase_opened(handle::TermHandle, chain_index::Integer, phase::PhaseSnapshot) = (
     _restart!(
         handle,
         handle.jobs[chain_index],
-        _description(chain_index, phase),
+        _description(chain_index, length(handle.jobs), phase),
         _total(phase),
     );
     nothing
