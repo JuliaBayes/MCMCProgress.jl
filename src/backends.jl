@@ -76,18 +76,25 @@ inside [`setup`](@ref).
 """
 backend_package(::Any) = nothing
 
-_check_backend_loaded(backends::Tuple) = (foreach(_check_backend_loaded, backends); backends)
+"""
+    is_loaded(backend) -> Bool
+
+Returns `true` if the extension for `backend` is loaded or if `backend`
+doesn't require an extension.
+"""
+is_loaded(backend) = backend_package(backend) === nothing
 
 function _check_backend_loaded(backend)
-    hasmethod(setup, Tuple{typeof(backend),RunSnapshot}) && return backend
+    is_loaded(backend) && return nothing
     pkg = backend_package(backend)
-    pkg === nothing && return backend
     throw(
         ArgumentError(
-            "the $(typeof(backend)) backend needs its extension loaded: run `using $pkg` first",
+            "extension for $(typeof(backend)) missing; load it with `using $pkg`",
         ),
     )
 end
+
+_check_backend_loaded(backends::Tuple) = (foreach(_check_backend_loaded, backends); backends)
 
 """
     PlainTextBackend(io::IO=stdout; now=time_ns)
