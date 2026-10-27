@@ -364,5 +364,4 @@ end
 
     out = String(take!(io))
     @test !occursin('\e', out)
-    @test !occursin("\x1b[", out)
 end
