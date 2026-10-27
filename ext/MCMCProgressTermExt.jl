@@ -46,7 +46,9 @@ _columns(::TermBackend{Nothing}) = copy(_DEFAULT_COLUMNS)
 _columns(backend::TermBackend) = backend.columns
 
 # A job with no total gets a spinner from `ProgressJob.start!`.
-_total(phase::PhaseSnapshot{Determinate}) = phase.kind.total
+# Term divides by numeric totals, so zero-step phases use a spinner.
+_total(phase::PhaseSnapshot{Determinate}) =
+    iszero(phase.kind.total) ? nothing : phase.kind.total
 _total(::PhaseSnapshot) = nothing
 
 # A bar has no other place to show its chain, so the description carries the
