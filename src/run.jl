@@ -42,12 +42,35 @@ chains(run::RunProgress) = run.chains
     RunSnapshot
 
 An immutable copy of a `RunProgress` at a given instant.
+
+`diagnostics` is `nothing` or an owned collection of per-chain named tuples.
+Backends must treat the snapshot and its diagnostic values as read-only.
 """
-struct RunSnapshot
+struct RunSnapshot{D}
     label::String
     chains::Tuple{Vararg{ChainSnapshot}}
+    diagnostics::D
 end
+RunSnapshot(label, chains) = RunSnapshot{Nothing}(label, chains, nothing)
 RunSnapshot(r::RunProgress) = RunSnapshot(r.label, map(ChainSnapshot, r.chains))
+
+_with_diagnostics(snapshot::RunSnapshot, ::Nothing) = snapshot
+function _with_diagnostics(snapshot::RunSnapshot, diagnostics)
+    rows = _copy_diagnostics(diagnostics())
+    length(rows) == length(snapshot.chains) ||
+        throw(ArgumentError("diagnostics must return one named tuple per chain"))
+    return RunSnapshot(snapshot.label, snapshot.chains, rows)
+end
+
+_copy_diagnostics(rows::Tuple{Vararg{NamedTuple}}) = rows
+_copy_diagnostics(rows::AbstractVector{<:NamedTuple}) = copy(rows)
+
+_chain_diagnostics(snapshot::RunSnapshot{Nothing}, index) = nothing
+_chain_diagnostics(snapshot::RunSnapshot, index) = snapshot.diagnostics[index]
+_diagnostics_text(::Nothing) = ""
+function _diagnostics_text(row::NamedTuple)
+    return join(("$name=$value" for (name, value) in pairs(row)), ", ")
+end
 
 function Base.show(io::IO, r::RunSnapshot)
     print(io, "RunSnapshot(", repr(r.label), ", ", length(r.chains), " chain")

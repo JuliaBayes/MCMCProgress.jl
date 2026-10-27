@@ -96,6 +96,7 @@ function refresh_loop(
     announced::Announced,
     period::UInt64,
     stop::Threads.Atomic{Bool},
+    diagnostics,
 )
     try
         deadline = time_ns() + period
@@ -103,7 +104,7 @@ function refresh_loop(
             now = time_ns()
             now < deadline && sleep((deadline - now) / 1e9)
             stop[] && break
-            state = RunSnapshot(run)
+            state = _with_diagnostics(RunSnapshot(run), diagnostics)
             announce!(handle, state, announced)
             refresh(handle, state)
             deadline = next_deadline(deadline, period, time_ns())
@@ -124,13 +125,14 @@ function spawn_refresh(
     announced::Announced,
     period::UInt64,
     stop::Threads.Atomic{Bool},
+    diagnostics=nothing,
 )
     pool = Threads.threadpoolsize(:interactive) > 0 ? :interactive : :default
-    return Threads.@spawn pool refresh_loop(run, handle, announced, period, stop)
+    return Threads.@spawn pool refresh_loop(run, handle, announced, period, stop, diagnostics)
 end
 
 """
-    progress(f; label, nchains, backend=nothing)
+    progress(f; label, nchains, backend=nothing, diagnostics=nothing)
 
 Display the progress of a run of `nchains` chains called `label` while `f(run)`
 samples, and return whatever `f` returns.
@@ -148,6 +150,19 @@ Callback failures stop refresh for the group.
 
 A separate task refreshes the backend every `REFRESH_PERIOD`
 nanoseconds. Recording a position never waits for the display.
+
+`diagnostics` optionally supplies a zero-argument snapshot function. It returns
+one `NamedTuple` per chain in a tuple or vector; field names label the displayed
+values. An empty named tuple hides that chain's diagnostics. Vectors are copied
+in chain order; returned values must remain unchanged after return.
+The sampler owns synchronization, metric calculation, and warmup separation.
+Include draw counts when values use a different denominator from progress.
+
+The function runs once per refresh, outside progress locks, and once after the
+refresh task stops for the final display. All backends share each snapshot.
+Progress and diagnostics are adjacent observations, not an atomic pair. The
+function must be safe on both the refresh task and the calling task. Its failure
+follows the same rules as a backend failure and still permits display cleanup.
 
 However `f` ends, any phase left open is closed, every chain still running is
 given an outcome, the refresh task stops, and the backend's `teardown`
@@ -188,11 +203,16 @@ progress(; label="Sampling mymodel", nchains=4) do run
 end
 ```
 """
-progress(f; label::AbstractString, nchains::Integer, backend=nothing) =
-    display_run(f, label, nchains, backend, REFRESH_PERIOD)
+function progress(
+    f; label::AbstractString, nchains::Integer, backend=nothing, diagnostics=nothing
+)
+    return display_run(f, label, nchains, backend, REFRESH_PERIOD; diagnostics)
+end
 
 # `progress` with an explicit refresh period.
-function display_run(f, label::AbstractString, nchains::Integer, backend, period::UInt64)
+function display_run(
+    f, label::AbstractString, nchains::Integer, backend, period::UInt64; diagnostics=nothing
+)
     period > 0 ||
         throw(ArgumentError("a refresh period must be positive, got $period nanoseconds"))
     run = RunProgress(label, nchains)
@@ -200,15 +220,15 @@ function display_run(f, label::AbstractString, nchains::Integer, backend, period
     handle = setup(resolve_backend(backend), RunSnapshot(run))
     announced = Announced(length(run.chains))
     stop = Threads.Atomic{Bool}(false)
-    task = spawn_refresh(run, handle, announced, period, stop)
+    task = spawn_refresh(run, handle, announced, period, stop, diagnostics)
     result = try
         f(run)
     catch exception
         outcome = exception isa InterruptException ? interrupted : failed
-        end_run!(run, handle, announced, task, stop, outcome, exception)
+        end_run!(run, handle, announced, task, stop, outcome, exception, diagnostics)
         rethrow()
     end
-    end_run!(run, handle, announced, task, stop, finished, nothing)
+    end_run!(run, handle, announced, task, stop, finished, nothing, diagnostics)
     return result
 end
 
@@ -237,7 +257,9 @@ function end_run!(
     stop::Threads.Atomic{Bool},
     outcome::Outcome,
     cause,
+    diagnostics,
 )
+    final = Ref{RunSnapshot}()
     steps = [
         "closing the phases the run left open" =>
             () -> foreach(close_open_phases!, run.chains),
@@ -254,16 +276,21 @@ function end_run!(
             # Rethrows any exception that ended the refresh task.
             wait(task)
         end,
-        # Every chain has ended and the refresh task has stopped, so the two
-        # snapshots below show the same state.
+        # Retain progress even if diagnostics fails, so teardown still runs.
+        "capturing the final diagnostics" =>
+            () -> begin
+                require_stopped(task)
+                final[] = RunSnapshot(run)
+                final[] = _with_diagnostics(final[], diagnostics)
+            end,
         "announcing the phases that closed as the run ended" =>
             () -> begin
                 require_stopped(task)
-                announce!(handle, RunSnapshot(run), announced)
+                announce!(handle, final[], announced)
             end,
         "tearing the backend down" => () -> begin
             require_stopped(task)
-            teardown(handle, RunSnapshot(run))
+            teardown(handle, final[])
         end,
     ]
     run_teardown_steps(steps, cause)

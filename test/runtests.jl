@@ -24,6 +24,7 @@ using Dates: Dates
     include("scope.jl")
     include("progresslogging.jl")
     include("term.jl")
+    include("diagnostics.jl")
     include("callback_sampler.jl")
 
     @testset "show methods for snapshot types" begin

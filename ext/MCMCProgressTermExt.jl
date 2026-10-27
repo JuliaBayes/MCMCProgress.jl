@@ -1,6 +1,7 @@
 module MCMCProgressTermExt
 
 using MCMCProgress: MCMCProgress, TermBackend, PhaseSnapshot, RunSnapshot, Determinate
+using Term: str_trunc
 import MCMCProgress: setup, phase_opened, phase_closed, refresh, teardown
 using Term.Progress:
     ProgressBar,
@@ -146,15 +147,34 @@ function refresh(handle::TermHandle, snapshot::RunSnapshot)
             _set_position!(handle.jobs[chain.index], phase.position)
         end
     end
+    _show_diagnostics!(handle, snapshot)
     render(handle.pbar)
+    return nothing
+end
+
+function _show_diagnostics!(handle::TermHandle, snapshot::RunSnapshot)
+    empty!(handle.pbar.extra_info)
+    for chain in snapshot.chains
+        text = MCMCProgress._diagnostics_text(
+            MCMCProgress._chain_diagnostics(snapshot, chain.index)
+        )
+        isempty(text) && continue
+        label = _description(chain.index, length(snapshot.chains))
+        width = max(3, handle.pbar.width - length(label) - 3)
+        handle.pbar.extra_info[label] = str_trunc(text, width)
+    end
     return nothing
 end
 
 # The refresh task has stopped before teardown, so this render is what draws
 # each chain's final position.
-function teardown(handle::TermHandle, ::RunSnapshot)
-    render(handle.pbar)
-    stop!(handle.pbar)
+function teardown(handle::TermHandle, snapshot::RunSnapshot)
+    try
+        _show_diagnostics!(handle, snapshot)
+        render(handle.pbar)
+    finally
+        stop!(handle.pbar)
+    end
     return nothing
 end
 
