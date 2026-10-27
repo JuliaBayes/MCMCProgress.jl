@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/simonsteiger/MCMCProgress.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/simonsteiger/MCMCProgress.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
-Supply live diagnostics without a diagnostics dependency:
+Report live diagnostics while sampling:
 
 ```julia
 progress(; label="My model", nchains=4, diagnostics=diagnostic_snapshot) do run
@@ -20,5 +20,5 @@ Term shows them below its bars; plain text adds them to periodic and final
 lines, preserving its existing output rate. Custom backends receive them in
 `snapshot.diagnostics`. Returned values must remain unchanged after return.
 
-[The Metropolis example](examples/diagnostics.jl) supplies live acceptance
-statistics using only the standard library.
+[The Metropolis example](examples/diagnostics.jl) shows live acceptance
+statistics from a sampler.

@@ -1,5 +1,5 @@
 # Random-walk Metropolis for a standard normal target, with live acceptance.
-# Run with the examples environment. No diagnostics package is required.
+# Run with the examples environment.
 using MCMCProgress, Random
 
 function metropolis_progress(; nchains=4, draws=10_000, backend=PlainTextBackend())
