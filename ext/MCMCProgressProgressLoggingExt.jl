@@ -40,8 +40,7 @@ function phase_opened(
     chain_index::Integer,
     phase::PhaseSnapshot,
 )
-    id = uuid4()
-    handle.ids[phase.id] = id
+    id = get!(uuid4, handle.ids, phase.id)
     @logmsg ProgressLevel _bar_name(handle, chain_index, phase) progress =
         _fraction(phase) _id = id
     return nothing
@@ -52,7 +51,8 @@ function phase_closed(
     chain_index::Integer,
     phase::PhaseSnapshot,
 )
-    id = pop!(handle.ids, phase.id)
+    id = pop!(handle.ids, phase.id, nothing)
+    id === nothing && return nothing
     @logmsg ProgressLevel _bar_name(handle, chain_index, phase) progress = "done" _id = id
     return nothing
 end
@@ -69,6 +69,13 @@ function refresh(handle::ProgressLoggingHandle, snapshot::RunSnapshot)
     return nothing
 end
 
-teardown(::ProgressLoggingHandle, ::RunSnapshot) = nothing
+function teardown(handle::ProgressLoggingHandle, snapshot::RunSnapshot)
+    isempty(handle.ids) && return nothing
+    # A sibling callback can prevent the final close announcement.
+    for chain in snapshot.chains, phase in chain.phases
+        phase_closed(handle, chain.index, phase)
+    end
+    return nothing
+end
 
 end

@@ -2,6 +2,25 @@
 capture_progress_logs(f) =
     Test.collect_test_logs(f; min_level=ProgressLogging.ProgressLevel)
 
+struct PhaseCallbackFailure
+    callback::Symbol
+    persistent::Bool
+    seen::Threads.Atomic{Bool}
+end
+function fail_callback!(backend::PhaseCallbackFailure, callback)
+    backend.callback === callback || return nothing
+    first = !Threads.atomic_xchg!(backend.seen, true)
+    (first || backend.persistent) && error("phase callback failed")
+    return nothing
+end
+MCMCProgress.setup(b::PhaseCallbackFailure, ::RunSnapshot) = b
+MCMCProgress.phase_opened(b::PhaseCallbackFailure, ::Integer, ::PhaseSnapshot) =
+    fail_callback!(b, :opened)
+MCMCProgress.phase_closed(b::PhaseCallbackFailure, ::Integer, ::PhaseSnapshot) =
+    fail_callback!(b, :closed)
+MCMCProgress.refresh(::PhaseCallbackFailure, ::RunSnapshot) = nothing
+MCMCProgress.teardown(::PhaseCallbackFailure, ::RunSnapshot) = nothing
+
 @testset "ProgressLoggingBackend emits records at ProgressLogging's own level" begin
     logs, _ = capture_progress_logs() do
         progress(;
@@ -135,5 +154,35 @@ end
     for id in ids
         done_count = count(r -> r.id == id && r.kwargs[:progress] == "done", logs)
         @test done_count == 1
+    end
+end
+
+@testset "sibling callback failures leave logging records balanced" begin
+    for (callback, persistent) in ((:opened, false), (:closed, false), (:opened, true))
+        @testset "$callback, persistent=$persistent" begin
+            failing = PhaseCallbackFailure(callback, persistent, Threads.Atomic{Bool}(false))
+            observer = MCMCProgress.RecordingBackend()
+            caught = nothing
+            logs, _ = capture_progress_logs() do
+                try
+                    progress(; label="test", nchains=1,
+                             backend=(MCMCProgress.ProgressLoggingBackend(), failing, observer)) do run
+                        p = open_phase!(chain_at(run, 1), "phase", Binary())
+                        close_phase!(p)
+                        timedwait(() -> failing.seen[], 10.0) === :ok ||
+                            error("callback timed out")
+                    end
+                catch err
+                    caught = err
+                end
+            end
+            records = filter(r -> haskey(r.kwargs, :progress), logs)
+            @test caught isa TaskFailedException
+            @test length(unique(r.id for r in records)) == 1
+            @test count(r -> r.kwargs[:progress] == "done", records) == 1
+            if !persistent
+                @test any(call -> call[1] === :phase_closed, observer.calls)
+            end
+        end
     end
 end
