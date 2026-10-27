@@ -153,8 +153,11 @@ end
 # The refresh task has stopped before teardown, so this render is what draws
 # each chain's final position.
 function teardown(handle::TermHandle, ::RunSnapshot)
-    render(handle.pbar)
-    stop!(handle.pbar)
+    try
+        render(handle.pbar)
+    finally
+        stop!(handle.pbar)
+    end
     return nothing
 end
 

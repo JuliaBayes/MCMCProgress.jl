@@ -2,6 +2,15 @@
 # calls into the extension are wrapped in `quietly`.
 quietly(f) = redirect_stdout(f, devnull)
 
+const TERM_RENDER_ERROR = ErrorException("column render failed")
+struct FailingRenderColumn <: Term.Progress.AbstractColumn
+    job::Term.Progress.ProgressJob
+end
+function Term.Progress.update!(column::FailingRenderColumn, args...)
+    column.job.finished && throw(TERM_RENDER_ERROR)
+    return ""
+end
+
 # Like `quietly`, but returns what was written.
 function loudly(f)
     pipe = Pipe()
@@ -365,6 +374,30 @@ end
         end
     end
     @test caught isa InterruptException
+end
+
+@testset "a failed final render still stops the progress bar" begin
+    snapshot = run_snapshot(1)
+    handle = quietly() do
+        setup(MCMCProgress.TermBackend(DataType[FailingRenderColumn]), snapshot)
+    end
+    phase = PhaseSnapshot(UInt(1), "Sampling", Binary(), 0, UInt64(0), UInt64(1))
+    quietly() do
+        phase_opened(handle, 1, phase)
+        phase_closed(handle, 1, phase)
+    end
+    caught, stopped = quietly() do
+        try
+            teardown(handle, snapshot)
+            (nothing, !handle.pbar.running)
+        catch err
+            (err, !handle.pbar.running)
+        finally
+            handle.pbar.running && Term.Progress.stop!(handle.pbar)
+        end
+    end
+    @test caught === TERM_RENDER_ERROR
+    @test stopped
 end
 
 @testset "backend_package names the Term extension" begin
