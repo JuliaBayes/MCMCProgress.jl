@@ -54,7 +54,8 @@ function announce!(handle, state::RunSnapshot, announced::Announced)
     for (j, chain) in pairs(state.chains)
         for (k, phase) in pairs(chain.phases)
             if k > announced.opened[j]
-                phase_opened(handle, chain.index, phase)
+                diagnostics = k == length(chain.phases) ? _chain_diagnostics(state, chain.index) : nothing
+                _phase_opened(handle, chain.index, phase, diagnostics)
                 announced.opened[j] = k
             end
             if k > announced.closed[j] && phase.closed !== nothing

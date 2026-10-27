@@ -96,6 +96,9 @@ function phase_opened(handle::PlainTextHandle, chain_index::Integer, phase::Phas
     return nothing
 end
 
+_phase_opened(handle::PlainTextHandle, i, phase, diagnostics) =
+    _write_phase_line!(handle, i, phase, diagnostics)
+
 function phase_closed(handle::PlainTextHandle, chain_index::Integer, phase::PhaseSnapshot)
     _write_phase_line!(handle, chain_index, phase)
     return nothing

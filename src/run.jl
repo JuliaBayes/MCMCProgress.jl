@@ -63,13 +63,15 @@ function _with_diagnostics(snapshot::RunSnapshot, diagnostics)
 end
 
 _copy_diagnostics(rows::Tuple{Vararg{NamedTuple}}) = rows
-_copy_diagnostics(rows::AbstractVector{<:NamedTuple}) = copy(rows)
+_copy_diagnostics(rows::AbstractVector{<:NamedTuple}) = collect(rows)
+_copy_diagnostics(rows::AbstractVector) = map(row -> row::NamedTuple, collect(rows))
 
 _chain_diagnostics(snapshot::RunSnapshot{Nothing}, index) = nothing
 _chain_diagnostics(snapshot::RunSnapshot, index) = snapshot.diagnostics[index]
 _diagnostics_text(::Nothing) = ""
 function _diagnostics_text(row::NamedTuple)
-    return join(("$name=$value" for (name, value) in pairs(row)), ", ")
+    text = join(("$name=$value" for (name, value) in pairs(row)), ", ")
+    return replace(text, '\n' => ' ', '\r' => ' ', '\t' => ' ')
 end
 
 function Base.show(io::IO, r::RunSnapshot)

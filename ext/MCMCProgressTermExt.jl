@@ -154,13 +154,15 @@ end
 
 function _show_diagnostics!(handle::TermHandle, snapshot::RunSnapshot)
     empty!(handle.pbar.extra_info)
+    snapshot.diagnostics === nothing && return nothing
+    nchains = length(snapshot.chains)
+    width = max(3, handle.pbar.width - length(_description(nchains, nchains)) - 3)
     for chain in snapshot.chains
         text = MCMCProgress._diagnostics_text(
             MCMCProgress._chain_diagnostics(snapshot, chain.index)
         )
         isempty(text) && continue
-        label = _description(chain.index, length(snapshot.chains))
-        width = max(3, handle.pbar.width - length(label) - 3)
+        label = _description(chain.index, nchains)
         handle.pbar.extra_info[label] = str_trunc(text, width)
     end
     return nothing

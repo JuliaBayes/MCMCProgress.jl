@@ -7,13 +7,27 @@ function MCMCProgress.refresh(backend::DiagnosticsObserver, snapshot::RunSnapsho
 end
 MCMCProgress.teardown(::DiagnosticsObserver, ::RunSnapshot) = nothing
 
+function await_display(channel)
+    timedwait(() -> isready(channel), 10.0) === :ok || error("display did not respond")
+    return take!(channel)
+end
+
 struct UnprintableDiagnostic end
 Base.print(::IO, ::UnprintableDiagnostic) = error("cannot print diagnostic")
 
+struct ZeroBasedRows{T} <: AbstractVector{T}
+    rows::Vector{T}
+end
+Base.size(rows::ZeroBasedRows) = size(rows.rows)
+Base.axes(rows::ZeroBasedRows) = (0:(length(rows) - 1),)
+Base.getindex(rows::ZeroBasedRows, i::Int) = rows.rows[i + 1]
+Base.copy(rows::ZeroBasedRows) = ZeroBasedRows(copy(rows.rows))
+
 @testset "diagnostics are shared, owned snapshots with live and final text" begin
     left, right = MCMCProgress.RecordingBackend(), MCMCProgress.RecordingBackend()
-    observer = DiagnosticsObserver(Channel{RunSnapshot}(32))
+    observer = DiagnosticsObserver(Channel{RunSnapshot}(Inf))
     io, calls = IOBuffer(), Ref(0)
+    live = ""
     rows = [(draws=0, divergences=0), (draws=0, divergences=2)]
     source = () -> begin
         calls[] += 1
@@ -27,11 +41,10 @@ Base.print(::IO, ::UnprintableDiagnostic) = error("cannot print diagnostic")
         diagnostics=source,
         backend=(PlainTextBackend(io), left, right, observer),
     ) do run
-        phase = open_phase!(chain_at(run, 1), "Sampling", Determinate(10))
-        advance!(phase, 5)
-        take!(observer.snapshots)
-        advance!(phase, 6)
-        take!(observer.snapshots)
+        open_phase!(chain_at(run, 1), "Sampling", Binary())
+        while isempty(await_display(observer.snapshots).chains[1].phases)
+        end
+        live = String(take!(io))
     end
     snapshots = [call[2] for call in left.calls if call[1] in (:refresh, :teardown)]
     @test all(a === b for (a, b) in zip(left.calls, right.calls))
@@ -41,17 +54,37 @@ Base.print(::IO, ::UnprintableDiagnostic) = error("cannot print diagnostic")
         ((draws=calls[], divergences=0), (draws=calls[], divergences=2))
     rows[1] = (draws=999, divergences=999)
     @test first(snapshots).diagnostics[1] == (draws=1, divergences=0)
+    @test length(split(live, '\n'; keepempty=false)) == 1
+    @test occursin("Sampling", live) && occursin("divergences=0", live)
     text = String(take!(io))
-    @test occursin("Sampling 5/10 (50%)", text)
-    @test occursin("draws=2, divergences=0", text)
     @test occursin("finished", text) && occursin("draws=$(calls[]), divergences=2", text)
+end
+
+@testset "diagnostic vectors follow chain order regardless of indices or element type" begin
+    for rows in ([(value=11,), (value=22,)], Any[(value=11,), (value=22,)])
+        io = IOBuffer()
+        progress(
+            _ -> nothing;
+            label="Rows",
+            nchains=2,
+            backend=PlainTextBackend(io),
+            diagnostics=()->ZeroBasedRows(rows),
+        )
+        lines = split(String(take!(io)), '\n'; keepempty=false)
+        @test occursin("chain 1/2", lines[1]) && occursin("value=11", lines[1])
+        @test occursin("chain 2/2", lines[2]) && occursin("value=22", lines[2])
+    end
 end
 
 @testset "a failed final diagnostics source still cleans up displays" begin
     for fail_body in (false, true)
         recorder = MCMCProgress.RecordingBackend()
         body_error = ErrorException("sampling failed")
-        source = fail_body ? () -> error("diagnostics failed") : () -> ()
+        caller = current_task()
+        source = () -> begin
+            current_task() === caller || return ((;),)
+            return fail_body ? error("diagnostics failed") : ()
+        end
         caught = nothing
         output = loudly() do
             Logging.with_logger(Logging.NullLogger()) do
@@ -77,6 +110,23 @@ end
     end
 end
 
+@testset "Term keeps diagnostic entries within one row and the bar width" begin
+    initial = run_snapshot(10)
+    rows = ntuple(10) do chain
+        chain == 1 && return (status="first\nsecond\t" * repeat("x", 100),)
+        return chain == 10 ? (status="last",) : (;)
+    end
+    handle = quietly(() -> setup(TermBackend(), initial))
+    snapshot = RunSnapshot(initial.label, initial.chains, rows)
+    output = loudly(() -> refresh(handle, snapshot))
+    quietly(() -> teardown(handle, snapshot))
+    plain = replace(output, r"\e\[[0-9;?]*[A-Za-z]"=>"")
+    lines = filter(line -> occursin(" : status=", line), split(plain, '\n'))
+    @test length(lines) == 2
+    @test occursin("first second ", plain)
+    @test all(line -> textwidth(line) <= handle.pbar.width, lines)
+end
+
 @testset "a diagnostics refresh failure permits sampling to finish" begin
     called = Channel{Nothing}(1)
     recorder, completed = MCMCProgress.RecordingBackend(), Ref(false)
@@ -88,7 +138,7 @@ end
         @test_throws TaskFailedException progress(;
             label="Health", nchains=1, backend=recorder, diagnostics=source
         ) do run
-            take!(called)
+            await_display(called)
             completed[] = true
         end
     end
