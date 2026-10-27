@@ -242,6 +242,19 @@ end
     end
 end
 
+@testset "a zero-step phase renders completed work without inventing iterations" begin
+    drawn = loudly() do
+        progress(; label="test", nchains=1,
+                 backend=(MCMCProgress.TermBackend(), PlainTextBackend(IOBuffer()))) do run
+            p = open_phase!(chain_at(run, 1), "Empty", Determinate(0))
+            close_phase!(p)
+        end
+    end
+    drawn = Term.cleantext(drawn)
+    @test occursin(r"\b0\b", drawn)
+    @test occursin("✔", drawn)
+end
+
 @testset "a sampling phase's time-remaining clock is not distorted by a slow adaptation before it" begin
     rs0 = run_snapshot(1)
     handle = quietly() do
@@ -365,19 +378,6 @@ end
         end
     end
     @test caught isa InterruptException
-end
-
-@testset "a zero-step phase renders completed work without inventing iterations" begin
-    drawn = loudly() do
-        progress(; label="test", nchains=1,
-                 backend=(MCMCProgress.TermBackend(), PlainTextBackend(IOBuffer()))) do run
-            p = open_phase!(chain_at(run, 1), "Empty", Determinate(0))
-            close_phase!(p)
-        end
-    end
-    drawn = Term.cleantext(drawn)
-    @test occursin(r"\b0\b", drawn)
-    @test occursin("✔", drawn)
 end
 
 @testset "backend_package names the Term extension" begin
