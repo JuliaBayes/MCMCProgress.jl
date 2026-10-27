@@ -48,7 +48,7 @@ mutable struct Phase{K<:PhaseKind}
     "The lock of the chain that this phase belongs to."
     lock::ReentrantLock
 
-    Phase(name::String, kind::K, lock::ReentrantLock) where {K<:PhaseKind} =
+    Phase(name::AbstractString, kind::K, lock::ReentrantLock) where {K<:PhaseKind} =
         new{K}(name, kind, 0, time_ns(), nothing, true, lock)
 end
 
