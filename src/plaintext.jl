@@ -36,7 +36,7 @@ end
 function _percent(phase::PhaseSnapshot{Determinate})
     total = phase.kind.total
     total == 0 && return 100
-    return round(Int, 100 * phase.position / total)
+    return round(Int, 100.0 * phase.position / total)
 end
 
 _phase_text(phase::PhaseSnapshot{Determinate}) = string(
