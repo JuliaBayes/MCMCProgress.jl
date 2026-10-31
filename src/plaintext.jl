@@ -71,6 +71,7 @@ function _write_phase_line!(
     handle::PlainTextHandle,
     chain_index::Integer,
     phase::PhaseSnapshot,
+    diagnostics=nothing,
 )
     line = @sprintf(
         "[%s] chain %d/%d · %s · %.1fs",
@@ -80,7 +81,8 @@ function _write_phase_line!(
         _phase_text(phase),
         _elapsed_seconds(handle, phase),
     )
-    println(handle.io, line)
+    text = _diagnostics_text(diagnostics)
+    println(handle.io, line, isempty(text) ? "" : " · $text")
     handle.last_written[chain_index] = (phase.id, _bucket(phase))
     return nothing
 end
@@ -93,6 +95,9 @@ function phase_opened(handle::PlainTextHandle, chain_index::Integer, phase::Phas
     _write_phase_line!(handle, chain_index, phase)
     return nothing
 end
+
+_phase_opened(handle::PlainTextHandle, i, phase, diagnostics) =
+    _write_phase_line!(handle, i, phase, diagnostics)
 
 function phase_closed(handle::PlainTextHandle, chain_index::Integer, phase::PhaseSnapshot)
     _write_phase_line!(handle, chain_index, phase)
@@ -107,7 +112,9 @@ function refresh(handle::PlainTextHandle, snapshot::RunSnapshot)
         phase.closed === nothing || continue
         key = (phase.id, _bucket(phase))
         get(handle.last_written, chain.index, nothing) == key && continue
-        _write_phase_line!(handle, chain.index, phase)
+        _write_phase_line!(
+            handle, chain.index, phase, _chain_diagnostics(snapshot, chain.index)
+        )
     end
     return nothing
 end
@@ -134,7 +141,8 @@ function teardown(handle::PlainTextHandle, snapshot::RunSnapshot)
                 elapsed,
             )
         end
-        println(handle.io, line)
+        text = _diagnostics_text(_chain_diagnostics(snapshot, chain.index))
+        println(handle.io, line, isempty(text) ? "" : " · $text")
     end
     return nothing
 end
