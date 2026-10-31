@@ -143,9 +143,10 @@ middling(xs) = sort(xs)[(length(xs)+1)÷2]
 @testset "progress drives a backend from setup to teardown" begin
     backend = MCMCProgress.RecordingBackend()
     second = MCMCProgress.RecordingBackend()
-    result = progress(; label="Sampling mymodel", nchains=2, backend=(backend, second)) do run
+    label = SubString("Sampling mymodel", 1)
+    result = progress(; label, nchains=2, backend=(backend, second)) do run
         c = chain_at(run, 1)
-        p = open_phase!(c, "Warmup", Determinate(10))
+        p = open_phase!(c, LazyString("Warm", "up"), Determinate(10))
         advance!(p, 10)
         close_phase!(p)
         :sampled
@@ -161,6 +162,8 @@ middling(xs) = sort(xs)[(length(xs)+1)÷2]
     @test :phase_closed in names
 
     final = final_snapshot(backend)
+    @test final.label == "Sampling mymodel"
+    @test final.chains[1].phases[1].name == "Warmup"
     @test [c.outcome for c in final.chains] == [finished, finished]
     @test final.chains[1].phases[1].position == 10
 end

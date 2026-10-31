@@ -11,7 +11,7 @@ struct RunProgress{C<:Tuple{Vararg{ChainProgress}}}
     "The progress of each chain in the run."
     chains::C
 
-    function RunProgress(label::String, nchains::Integer)
+    function RunProgress(label::AbstractString, nchains::Integer)
         chains = ntuple(i -> ChainProgress(i), nchains)
         return new{typeof(chains)}(label, chains)
     end
