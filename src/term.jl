@@ -12,6 +12,8 @@ elapsed time. A `Vector` of Term column types, or one of Term's preset symbols
 such as `:minimal`, is passed to `ProgressBar` as given. `columns_kwargs` passes
 keyword arguments to individual columns, keyed by column type name, as
 `Term.Progress.ProgressBar` accepts them.
+
+A zero-step phase uses a spinner while open and a completion tick when closed.
 """
 struct TermBackend{C}
     columns::C
