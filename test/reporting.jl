@@ -198,8 +198,8 @@ end
     end
 
     # Each chain's snapshots in the order it took them, and all of them together.
-    perchain = map(fetch, records)
-    seen = reduce(vcat, perchain)
+    per_chain = map(fetch, records)
+    seen = reduce(vcat, per_chain)
     push!(seen, RunSnapshot(r))
 
     @test !isempty(seen)
@@ -249,7 +249,7 @@ end
     end
 
     successive = [
-        (earlier, later) for ordered in perchain for
+        (earlier, later) for ordered in per_chain for
         (earlier, later) in zip(ordered, Iterators.drop(ordered, 1))
     ]
 

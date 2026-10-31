@@ -229,12 +229,12 @@ end
 end
 
 @testset "column configuration on the backend value reaches Term" begin
-    mycols = DataType[Term.Progress.DescriptionColumn, Term.Progress.ProgressColumn]
+    custom_columns = DataType[Term.Progress.DescriptionColumn, Term.Progress.ProgressColumn]
     rs0 = run_snapshot(1)
     handle = quietly() do
-        setup(MCMCProgress.TermBackend(mycols), rs0)
+        setup(MCMCProgress.TermBackend(custom_columns), rs0)
     end
-    @test handle.template_columns == mycols
+    @test handle.template_columns == custom_columns
 
     kwargs_backend = MCMCProgress.TermBackend(;
         columns_kwargs=Dict{Symbol,Any}(:DescriptionColumn => Dict(:style => "red")),

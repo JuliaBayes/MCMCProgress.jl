@@ -69,12 +69,12 @@ body would end *every* unfinished chain as `failed`, not only this one.
 abandon!(r::PhaseReporter) = MCMCProgress.set_outcome!(r.chain, failed)
 
 """
-    SamplerPlan(; warmup, sampling, warmuptotal, samplingtotal, abandonat, failat)
+    SamplerPlan(; warmup, sampling, warmup_total, sampling_total, abandon_at, fail_at)
 
 What one chain's sampler does: the step numbers it reports while adapting
 (`warmup`) and then while sampling (`sampling`), the totals it declares for
 those two phases, and a sampling step number at which it either gives up on the
-chain (`abandonat`) or throws (`failat`). A total left out makes its phase count
+chain (`abandon_at`) or throws (`fail_at`). A total left out makes its phase count
 instead of declaring a length.
 
 Listing the steps lets a test skip a step, repeat one, or stop short of the
@@ -83,38 +83,38 @@ declared total.
 struct SamplerPlan
     warmup::Vector{Int}
     sampling::Vector{Int}
-    warmuptotal::Union{Int,Nothing}
-    samplingtotal::Union{Int,Nothing}
-    abandonat::Union{Int,Nothing}
-    failat::Union{Int,Nothing}
+    warmup_total::Union{Int,Nothing}
+    sampling_total::Union{Int,Nothing}
+    abandon_at::Union{Int,Nothing}
+    fail_at::Union{Int,Nothing}
 end
 
 SamplerPlan(;
     warmup,
     sampling,
-    warmuptotal=nothing,
-    samplingtotal=nothing,
-    abandonat=nothing,
-    failat=nothing,
+    warmup_total=nothing,
+    sampling_total=nothing,
+    abandon_at=nothing,
+    fail_at=nothing,
 ) = SamplerPlan(
     collect(Int, warmup),
     collect(Int, sampling),
-    warmuptotal,
-    samplingtotal,
-    abandonat,
-    failat,
+    warmup_total,
+    sampling_total,
+    abandon_at,
+    fail_at,
 )
 
 # Report warmup steps, move to sampling, report sampling steps, then finish,
 # abandon or throw as `plan` says.
 function foreign_sample!(reporter::PhaseReporter, plan::SamplerPlan)
     for step in plan.warmup
-        report!(reporter, step; stepsize=0.05)
+        report!(reporter, step; step_size=0.05)
     end
-    next_phase!(reporter, "Sampling", plan.samplingtotal)
+    next_phase!(reporter, "Sampling", plan.sampling_total)
     for step in plan.sampling
-        step == plan.failat && error("the chain broke down at step $step")
-        if step == plan.abandonat
+        step == plan.fail_at && error("the chain broke down at step $step")
+        if step == plan.abandon_at
             abandon!(reporter)
             return nothing
         end
@@ -128,7 +128,7 @@ end
 # report after a reporter is created comes from inside the sampler.
 function drive_chains(run::MCMCProgress.RunProgress, plans::AbstractVector{SamplerPlan})
     reporters = map(eachindex(plans)) do j
-        PhaseReporter(chain_at(run, j), "Warmup", plans[j].warmuptotal)
+        PhaseReporter(chain_at(run, j), "Warmup", plans[j].warmup_total)
     end
     @sync for j in eachindex(plans)
         Threads.@spawn foreign_sample!(reporters[j], plans[j])
@@ -151,7 +151,7 @@ end
 # A chain that adapts and then samples, reporting every step number of both
 # phases.
 plain_plan(; kwargs...) =
-    SamplerPlan(; warmup=1:12, sampling=1:20, warmuptotal=12, samplingtotal=20, kwargs...)
+    SamplerPlan(; warmup=1:12, sampling=1:20, warmup_total=12, sampling_total=20, kwargs...)
 
 @testset "a sampler that owns its loops drives a run through its reporter" begin
     nchains = 3
@@ -190,22 +190,22 @@ end
     skipping = SamplerPlan(;
         warmup=[1, 2, 5, 9, 12],
         sampling=[4, 8, 20],
-        warmuptotal=12,
-        samplingtotal=20,
+        warmup_total=12,
+        sampling_total=20,
     )
     repeating = SamplerPlan(;
         warmup=[1, 1, 2, 2, 12],
         sampling=[1, 1, 2, 20],
-        warmuptotal=12,
-        samplingtotal=20,
+        warmup_total=12,
+        sampling_total=20,
     )
-    stoppingshort = SamplerPlan(;
+    stopping_short = SamplerPlan(;
         warmup=[1, 2, 3],
         sampling=[1, 2, 3, 4, 5],
-        warmuptotal=12,
-        samplingtotal=20,
+        warmup_total=12,
+        sampling_total=20,
     )
-    plans = [skipping, repeating, stoppingshort]
+    plans = [skipping, repeating, stopping_short]
     backend = MCMCProgress.RecordingBackend()
 
     reporters = progress(; label="Sampling mymodel", nchains=length(plans), backend) do run
@@ -228,7 +228,7 @@ end
 end
 
 @testset "a sampler that abandons a chain partway leaves that chain failed" begin
-    plans = [plain_plan(), plain_plan(; abandonat=4), plain_plan()]
+    plans = [plain_plan(), plain_plan(; abandon_at=4), plain_plan()]
     backend = MCMCProgress.RecordingBackend()
 
     progress(; label="Sampling mymodel", nchains=length(plans), backend) do run
@@ -251,7 +251,7 @@ end
 end
 
 @testset "an exception out of one chain's sampler ends every chain as failed" begin
-    plans = [plain_plan(), plain_plan(; failat=4), plain_plan()]
+    plans = [plain_plan(), plain_plan(; fail_at=4), plain_plan()]
     backend = MCMCProgress.RecordingBackend()
 
     @test_throws "the chain broke down at step 4" progress(;
@@ -282,7 +282,7 @@ end
 
     @testset "a step number past the end, reported from inside a run" begin
         # An off-by-one sampler; the run rethrows and ends the display as for any failure.
-        plans = [SamplerPlan(; warmup=1:3, sampling=1:4, warmuptotal=3, samplingtotal=3)]
+        plans = [SamplerPlan(; warmup=1:3, sampling=1:4, warmup_total=3, sampling_total=3)]
         backend = MCMCProgress.RecordingBackend()
         @test_throws "cannot advance to 4" progress(;
             label="Sampling mymodel",
@@ -307,10 +307,10 @@ end
         ) do run
             reporter = PhaseReporter(chain_at(run, 1), "Warmup", 12)
             report!(reporter, 7)
-            leftbehind = reporter.phase
+            left_behind = reporter.phase
             next_phase!(reporter, "Sampling", 20)
             # Code still holding the previous phase reports into it.
-            advance!(leftbehind, 8)
+            advance!(left_behind, 8)
         end
 
         final = teardown_snapshot(backend)
