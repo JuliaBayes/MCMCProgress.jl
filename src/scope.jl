@@ -154,16 +154,9 @@ nanoseconds. Recording a position never waits for the display.
 
 `diagnostics` optionally supplies a zero-argument snapshot function. It returns
 one `NamedTuple` per chain in a tuple or vector; field names label the displayed
-values. An empty named tuple hides that chain's diagnostics. Vectors are copied
-in chain order; returned values must remain unchanged after return.
-The sampler owns synchronization, metric calculation, and warmup separation.
-Include draw counts when values use a different denominator from progress.
-
-The function runs once per refresh, outside progress locks, and once after the
-refresh task stops for the final display. All backends share each snapshot.
-Progress and diagnostics are adjacent observations, not an atomic pair. The
-function must be safe on both the refresh task and the calling task. Its failure
-follows the same rules as a backend failure and still permits display cleanup.
+values. The chain's diagnostics are not shown when its named tuple is empty.
+See [Live diagnostics](@ref live-diagnostics) for examples and guidance on
+collecting values safely, interpreting them, and handling callback failures.
 
 However `f` ends, any phase left open is closed, every chain still running is
 given an outcome, the refresh task stops, and the backend's `teardown`

@@ -11,14 +11,9 @@ end
 ```
 
 `diagnostic_snapshot()` returns one named tuple per chain, for example
-`[(draws=2400, divergences=0, depth_hits=0), ...]`. The sampler owns the
-statistics and synchronization. Return an empty named tuple for a chain with
-no diagnostics, and keep warmup and sampling statistics separate.
+`[(draws=2400, divergences=0, depth_hits=0), ...]`. Term shows these values
+below its bars; plain text includes them in progress updates and final summaries.
 
-The display reads these summaries on its refresh task and once at the end.
-Term shows them below its bars; plain text adds them to periodic and final
-lines, preserving its existing output rate. Custom backends receive them in
-`snapshot.diagnostics`. Returned values must remain unchanged after return.
-
-[The Metropolis example](examples/diagnostics.jl) shows live acceptance
-statistics from a sampler.
+See the [live diagnostics guide](docs/src/diagnostics.md) for details, or
+[the Metropolis example](examples/diagnostics.jl) for live acceptance statistics
+from a sampler.

@@ -9,6 +9,7 @@ makedocs(;
     pages=[
         "index.md",
         "hmc.md",
+        "diagnostics.md",
         "api.md",
     ],
     checkdocs=:exports,
