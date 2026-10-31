@@ -20,22 +20,12 @@ run_snapshot(nchains::Integer) = RunSnapshot(
     ntuple(j -> ChainSnapshot(j, (), nothing), nchains),
 )
 
-@testset "the run's label becomes the progress bar's title" begin
-    rs0 = run_snapshot(1)
-    handle = quietly() do
-        setup(MCMCProgress.TermBackend(), rs0)
-    end
-    @test handle.pbar.title == "Sampling mymodel"
-    quietly() do
-        teardown(handle, rs0)
-    end
-end
-
 @testset "one bar per chain, created before the run starts and kept for the whole run" begin
     rs0 = run_snapshot(3)
     handle = quietly() do
         setup(MCMCProgress.TermBackend(), rs0)
     end
+    @test handle.pbar.title == "Sampling mymodel"
     @test length(handle.pbar.jobs) == 3
     @test Set(keys(handle.jobs)) == Set(1:3)
     @test [handle.jobs[j].description for j in 1:3] == ["chain $j/3" for j in 1:3]
@@ -146,6 +136,8 @@ end
     # A determinate phase gets a bar column; phases with no total get a spinner.
     @test any(c -> c isa Term.Progress.ProgressColumn, job.columns)
     @test !any(c -> c isa Term.Progress.SpinnerColumn, job.columns)
+    @test !any(c -> c isa Term.Progress.ElapsedColumn, job.columns)
+    @test any(c -> c isa Term.Progress.ETAColumn, job.columns)
 
     counting = PhaseSnapshot(UInt(2), "Adapting", Counting(), 0, UInt64(0), nothing)
     quietly() do
@@ -195,30 +187,6 @@ end
     end
 end
 
-@testset "the default column set omits elapsed time but keeps the remaining-time estimate" begin
-    rs0 = run_snapshot(1)
-    handle = quietly() do
-        setup(MCMCProgress.TermBackend(), rs0)
-    end
-    det = PhaseSnapshot(UInt(1), "Warmup", Determinate(10), 0, UInt64(0), nothing)
-    quietly() do
-        phase_opened(handle, 1, det)
-    end
-    job = handle.jobs[1]
-
-    @test !any(c -> c isa Term.Progress.ElapsedColumn, job.columns)
-    @test any(c -> c isa Term.Progress.ETAColumn, job.columns)
-
-    quietly() do
-        phase_closed(
-            handle,
-            1,
-            PhaseSnapshot(UInt(1), "Warmup", Determinate(10), 10, UInt64(0), UInt64(1)),
-        )
-        teardown(handle, rs0)
-    end
-end
-
 @testset "column configuration on the backend value reaches Term" begin
     mycols = DataType[Term.Progress.DescriptionColumn, Term.Progress.ProgressColumn]
     rs0 = run_snapshot(1)
@@ -252,7 +220,8 @@ end
     quietly() do
         phase_opened(handle, 1, warmup)
     end
-    sleep(0.3)  # a slow adaptation phase
+    # Give adaptation an older start without waiting on the scheduler.
+    handle.jobs[1].startime -= Dates.Second(1)
     quietly() do
         phase_closed(
             handle,
@@ -270,7 +239,6 @@ end
 
     # Opening a phase resets the job's `startime`, so the estimate excludes adaptation.
     @test job.startime >= before_sampling_opened
-    @test (Dates.now() - job.startime) < Dates.Millisecond(200)  # well under the 300 ms adaptation
 
     quietly() do
         phase_closed(
