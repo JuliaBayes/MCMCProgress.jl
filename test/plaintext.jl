@@ -308,9 +308,9 @@ end
         return nothing
     end
 
-    iobuf = IOBuffer()
-    build_lines(iobuf)
-    buffer_bytes = take!(iobuf)
+    io_buffer = IOBuffer()
+    build_lines(io_buffer)
+    buffer_bytes = take!(io_buffer)
 
     path, file = mktemp()
     try
