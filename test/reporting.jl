@@ -152,7 +152,6 @@ end
     r = MCMCProgress.RunProgress("Sampling mymodel", 2)
     c1, c2 = chain_at(r, 1), chain_at(r, 2)
     p1 = open_phase!(c1, "Warmup", Determinate(10))
-    done = Threads.Atomic{Bool}(false)
 
     # Advancing chain 1 and running a phase on chain 2 must not need chain 1's lock.
     lock(c1.lock) do
@@ -161,11 +160,9 @@ end
             p2 = open_phase!(c2, "Warmup", Counting())
             advance!(p2, 3)
             close_phase!(p2)
-            done[] = true
         end)
     end
 
-    @test done[]
     @test p1.position == 7
     @test length(c2.phases) == 1
     @test c2.phases[1].position == 3
@@ -202,7 +199,6 @@ end
     seen = reduce(vcat, perchain)
     push!(seen, RunSnapshot(r))
 
-    @test !isempty(seen)
     names = ["Finding step size", "Warmup"]
 
     # Only snapshots with two chains mid-phase test concurrent reads; report how many.

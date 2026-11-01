@@ -9,18 +9,16 @@ Reports one chain's progress for a sampler that owns its loops. Holds the phase
 open on `chain`, opening the first one, `name`, on construction. A `total` makes
 that phase determinate; without one it counts.
 
-`steps` holds every step the sampler reported, and `positions` the phase's
-position immediately after each report.
+`positions` holds the phase's position immediately after each report.
 """
 mutable struct PhaseReporter
     chain::MCMCProgress.ChainProgress
     phase::MCMCProgress.Phase
-    steps::Vector{Int}
     positions::Vector{Int}
 end
 
 PhaseReporter(c::MCMCProgress.ChainProgress, name::AbstractString, total=nothing) =
-    PhaseReporter(c, open_phase!(c, name, phase_kind(total)), Int[], Int[])
+    PhaseReporter(c, open_phase!(c, name, phase_kind(total)), Int[])
 
 # `nothing` means the sampler knows no total.
 phase_kind(total::Integer) = Determinate(total)
@@ -34,7 +32,6 @@ reporter's phase. `meta` is accepted and ignored.
 """
 function report!(r::PhaseReporter, step::Integer; meta...)
     advance!(r.phase, step)
-    push!(r.steps, Int(step))
     push!(r.positions, r.phase.position)
     return nothing
 end
@@ -181,8 +178,7 @@ plain_plan(; kwargs...) =
     end
 
     for (r, plan) in zip(reporters, plans)
-        @test r.steps == vcat(plan.warmup, plan.sampling)
-        @test r.positions == r.steps
+        @test r.positions == vcat(plan.warmup, plan.sampling)
     end
 end
 
@@ -222,8 +218,7 @@ end
 
     # Every report set the position to the reported step.
     for (r, plan) in zip(reporters, plans)
-        @test r.steps == vcat(plan.warmup, plan.sampling)
-        @test r.positions == r.steps
+        @test r.positions == vcat(plan.warmup, plan.sampling)
     end
 end
 

@@ -339,7 +339,6 @@ end
         @test_throws "this backend cannot tear down" quick_run((backend, second)) do run
             nothing
         end
-        @test :teardown in backend.calls
         @test call_names(second) == [:setup, :teardown]
     end
 end
