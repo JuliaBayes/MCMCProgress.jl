@@ -176,7 +176,7 @@ struct Scene
     summary::String
     run::Function
     expect::Union{Type,Nothing}    # the exception type this scene is meant to raise, or nothing
-    fixedbackend::Union{String,Nothing}    # the only backend this scene runs through, or nothing for any of them
+    fixed_backend::Union{String,Nothing}    # the only backend this scene runs through, or nothing for any of them
 end
 
 const BACKEND_NAMES = ("plaintext", "term", "progresslogging")
@@ -253,15 +253,15 @@ end
 # The backend name a scene actually runs with: `scene`'s own fixed backend if
 # it has one, otherwise `requested`, falling back to plain text.
 function resolve_backend_name(scene::Scene, requested::Union{AbstractString,Nothing})
-    if scene.fixedbackend !== nothing
+    if scene.fixed_backend !== nothing
         requested === nothing ||
-            requested == scene.fixedbackend ||
+            requested == scene.fixed_backend ||
             throw(
                 ArgumentError(
-                    "the \"$(scene.name)\" scene only runs through the $(scene.fixedbackend) backend, got \"$requested\"",
+                    "the \"$(scene.name)\" scene only runs through the $(scene.fixed_backend) backend, got \"$requested\"",
                 ),
             )
-        return scene.fixedbackend
+        return scene.fixed_backend
     end
     name = requested === nothing ? "plaintext" : requested
     name in BACKEND_NAMES || throw(
@@ -295,13 +295,13 @@ function with_backend(f, name::AbstractString)
 end
 
 function run_scene(scene::Scene, requested::Union{AbstractString,Nothing})
-    backendname = resolve_backend_name(scene, requested)
+    backend_name = resolve_backend_name(scene, requested)
     println()
-    println("=== ", scene.name, " (", backendname, ") ===")
+    println("=== ", scene.name, " (", backend_name, ") ===")
     println(scene.summary)
     println()
     try
-        with_backend(scene.run, backendname)
+        with_backend(scene.run, backend_name)
         scene.expect === nothing || error(
             "scene \"$(scene.name)\" was meant to end by raising $(scene.expect), but it returned normally",
         )
@@ -326,7 +326,7 @@ end
 # `nothing`). The spinner scene only runs with `--scene spinners`.
 function run_all(requested::Union{AbstractString,Nothing})
     for scene in SCENES
-        scene.fixedbackend === nothing || continue
+        scene.fixed_backend === nothing || continue
         run_scene(scene, requested)
     end
     println()
@@ -384,7 +384,7 @@ function print_listing()
     println("Scenes:")
     for scene in SCENES
         backends =
-            scene.fixedbackend === nothing ? join(BACKEND_NAMES, ", ") : scene.fixedbackend
+            scene.fixed_backend === nothing ? join(BACKEND_NAMES, ", ") : scene.fixed_backend
         println("  ", rpad(scene.name, 12), scene.summary)
         println("  ", " "^12, "(backend: ", backends, ")")
     end

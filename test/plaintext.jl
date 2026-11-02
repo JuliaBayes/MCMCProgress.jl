@@ -68,6 +68,17 @@
     ]
 end
 
+@testset "large phase totals display 100% at completion" begin
+    io = IOBuffer()
+    total = typemax(Int)
+    progress(; label="test", nchains=1, backend=PlainTextBackend(io)) do run
+        p = open_phase!(chain_at(run, 1), "Sampling", Determinate(total))
+        advance!(p, total)
+        close_phase!(p)
+    end
+    @test occursin("$total/$total (100%)", String(take!(io)))
+end
+
 @testset "refresh writes only when the displayed percentage bucket changes" begin
     # The buckets are five percentage points wide: 0, 5, 10, … 100.
     io = IOBuffer()
@@ -297,9 +308,9 @@ end
         return nothing
     end
 
-    iobuf = IOBuffer()
-    build_lines(iobuf)
-    buffer_bytes = take!(iobuf)
+    io_buffer = IOBuffer()
+    build_lines(io_buffer)
+    buffer_bytes = take!(io_buffer)
 
     path, file = mktemp()
     try
@@ -364,5 +375,4 @@ end
 
     out = String(take!(io))
     @test !occursin('\e', out)
-    @test !occursin("\x1b[", out)
 end

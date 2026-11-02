@@ -42,10 +42,9 @@ function open_phase!(c::ChainProgress, name::AbstractString, kind::PhaseKind)
                 "chain $(c.index) has already ended (outcome $(c.outcome[]))",
             ),
         )
-        i = findlast(isopen, c.phases)
-        i === nothing || throw(
+        isempty(c.phases) || !isopen(last(c.phases)) || throw(
             ArgumentError(
-                "chain $(c.index) still has an open phase (`$(c.phases[i].name)`)",
+                "chain $(c.index) still has an open phase (`$(last(c.phases).name)`)",
             ),
         )
         push!(c.phases, phase)

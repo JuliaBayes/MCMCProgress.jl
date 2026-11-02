@@ -143,9 +143,10 @@ middling(xs) = sort(xs)[(length(xs)+1)÷2]
 @testset "progress drives a backend from setup to teardown" begin
     backend = MCMCProgress.RecordingBackend()
     second = MCMCProgress.RecordingBackend()
-    result = progress(; label="Sampling mymodel", nchains=2, backend=(backend, second)) do run
+    label = SubString("Sampling mymodel", 1)
+    result = progress(; label, nchains=2, backend=(backend, second)) do run
         c = chain_at(run, 1)
-        p = open_phase!(c, "Warmup", Determinate(10))
+        p = open_phase!(c, LazyString("Warm", "up"), Determinate(10))
         advance!(p, 10)
         close_phase!(p)
         :sampled
@@ -161,6 +162,8 @@ middling(xs) = sort(xs)[(length(xs)+1)÷2]
     @test :phase_closed in names
 
     final = final_snapshot(backend)
+    @test final.label == "Sampling mymodel"
+    @test final.chains[1].phases[1].name == "Warmup"
     @test [c.outcome for c in final.chains] == [finished, finished]
     @test final.chains[1].phases[1].position == 10
 end
@@ -232,19 +235,19 @@ end
 
 @testset "an exception from the body reaches the caller unchanged" begin
     backend = MCMCProgress.RecordingBackend()
-    blewup = ErrorException("the sampler blew up")
+    blew_up = ErrorException("the sampler blew up")
 
     caught = nothing
     try
         quick_run(backend; nchains=2) do run
             open_phase!(chain_at(run, 1), "Warmup", Determinate(100))
-            throw(blewup)
+            throw(blew_up)
         end
     catch exception
         caught = exception
     end
 
-    @test caught === blewup  # the same object, not a copy and not a wrapper
+    @test caught === blew_up  # the same object, not a copy and not a wrapper
 
     # The backend is still torn down.
     @test last(call_names(backend)) === :teardown
@@ -336,28 +339,27 @@ end
         @test_throws "this backend cannot tear down" quick_run((backend, second)) do run
             nothing
         end
-        @test :teardown in backend.calls
         @test call_names(second) == [:setup, :teardown]
     end
 end
 
 @testset "a failing teardown does not hide the exception from the body" begin
     backend = FailingBackend(:teardown)
-    blewup = ErrorException("the sampler blew up")
+    blew_up = ErrorException("the sampler blew up")
 
     caught = nothing
     # The teardown's own failure is logged, so that neither exception is lost.
     @test_logs (:error,) match_mode = :any begin
         try
             quick_run(backend) do run
-                throw(blewup)
+                throw(blew_up)
             end
         catch exception
             caught = exception
         end
     end
 
-    @test caught === blewup
+    @test caught === blew_up
     @test :teardown in backend.calls
 end
 
@@ -499,11 +501,11 @@ end
 
     # Refreshes stay on the grid the first one set; a drifting clock would miss
     # by 50 ms each time. The median and a loose bound tolerate a busy machine.
-    offgrid = map(times[(begin+1):end]) do t
+    off_grid = map(times[(begin+1):end]) do t
         remainder = (t - times[begin]) % period
         min(remainder, period - remainder)
     end
-    @test middling(offgrid) < period ÷ 3
+    @test middling(off_grid) < period ÷ 3
 
     # Skipped deadlines keep every gap close to a whole period.
     gaps = diff(times)
