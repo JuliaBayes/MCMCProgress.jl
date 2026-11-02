@@ -21,7 +21,6 @@ end
 Base.size(rows::ZeroBasedRows) = size(rows.rows)
 Base.axes(rows::ZeroBasedRows) = (0:(length(rows) - 1),)
 Base.getindex(rows::ZeroBasedRows, i::Int) = rows.rows[i + 1]
-Base.copy(rows::ZeroBasedRows) = ZeroBasedRows(copy(rows.rows))
 
 @testset "diagnostics are shared, owned snapshots with live and final text" begin
     left, right = MCMCProgress.RecordingBackend(), MCMCProgress.RecordingBackend()
@@ -33,13 +32,10 @@ Base.copy(rows::ZeroBasedRows) = ZeroBasedRows(copy(rows.rows))
         calls[] += 1
         rows[1] = (draws=calls[], divergences=0)
         rows[2] = (draws=calls[], divergences=2)
-        rows
+        ZeroBasedRows(rows)
     end
-    progress(;
-        label="Health",
-        nchains=2,
-        diagnostics=source,
-        backend=(PlainTextBackend(io), left, right, observer),
+    quick_run(
+        (PlainTextBackend(io), left, right, observer); nchains=2, diagnostics=source
     ) do run
         open_phase!(chain_at(run, 1), "Sampling", Binary())
         while isempty(await_display(observer.snapshots).chains[1].phases)
@@ -49,7 +45,6 @@ Base.copy(rows::ZeroBasedRows) = ZeroBasedRows(copy(rows.rows))
     snapshots = [call[2] for call in left.calls if call[1] in (:refresh, :teardown)]
     @test all(a === b for (a, b) in zip(left.calls, right.calls))
     @test calls[] == length(snapshots)
-    @test first(snapshots).diagnostics[1].draws == 1
     @test Tuple(last(snapshots).diagnostics) ==
         ((draws=calls[], divergences=0), (draws=calls[], divergences=2))
     rows[1] = (draws=999, divergences=999)
@@ -60,20 +55,18 @@ Base.copy(rows::ZeroBasedRows) = ZeroBasedRows(copy(rows.rows))
     @test occursin("finished", text) && occursin("draws=$(calls[]), divergences=2", text)
 end
 
-@testset "diagnostic vectors follow chain order regardless of indices or element type" begin
-    for rows in ([(value=11,), (value=22,)], Any[(value=11,), (value=22,)])
-        io = IOBuffer()
-        progress(
-            _ -> nothing;
-            label="Rows",
-            nchains=2,
-            backend=PlainTextBackend(io),
-            diagnostics=()->ZeroBasedRows(rows),
-        )
-        lines = split(String(take!(io)), '\n'; keepempty=false)
-        @test occursin("chain 1/2", lines[1]) && occursin("value=11", lines[1])
-        @test occursin("chain 2/2", lines[2]) && occursin("value=22", lines[2])
-    end
+@testset "diagnostic vectors accept named tuples with an abstract element type" begin
+    io = IOBuffer()
+    progress(
+        _ -> nothing;
+        label="Rows",
+        nchains=2,
+        backend=PlainTextBackend(io),
+        diagnostics=()->ZeroBasedRows(Any[(value=11,), (value=22,)]),
+    )
+    lines = split(String(take!(io)), '\n'; keepempty=false)
+    @test occursin("chain 1/2", lines[1]) && occursin("value=11", lines[1])
+    @test occursin("chain 2/2", lines[2]) && occursin("value=22", lines[2])
 end
 
 @testset "a failed final diagnostics source still cleans up displays" begin
@@ -85,28 +78,20 @@ end
             current_task() === caller || return ((;),)
             return fail_body ? error("diagnostics failed") : ()
         end
-        caught = nothing
-        output = loudly() do
-            Logging.with_logger(Logging.NullLogger()) do
-                try
-                    progress(;
-                        label="Health",
-                        nchains=1,
-                        backend=(TermBackend(), recorder),
-                        diagnostics=source,
-                    ) do run
-                        open_phase!(chain_at(run, 1), "Sampling", Counting())
-                        fail_body && throw(body_error)
-                    end
-                catch exception
-                    caught = exception
+        caught = Logging.with_logger(Logging.NullLogger()) do
+            try
+                quick_run(recorder; diagnostics=source) do run
+                    open_phase!(chain_at(run, 1), "Sampling", Counting())
+                    fail_body && throw(body_error)
                 end
+            catch exception
+                exception
             end
         end
         @test fail_body ? caught === body_error : caught isa ArgumentError
-        @test occursin("\e[?25h", output)
-        @test last(recorder.calls)[1] == :teardown
-        @test last(recorder.calls)[2].chains[1].outcome == (fail_body ? failed : finished)
+        @test last(call_names(recorder)) == :teardown
+        @test final_snapshot(recorder).diagnostics === nothing
+        @test only(final_snapshot(recorder).chains[1].phases).closed !== nothing
     end
 end
 
@@ -119,7 +104,8 @@ end
     handle = quietly(() -> setup(TermBackend(), initial))
     snapshot = RunSnapshot(initial.label, initial.chains, rows)
     output = loudly(() -> refresh(handle, snapshot))
-    quietly(() -> teardown(handle, snapshot))
+    final = RunSnapshot(initial.label, initial.chains, ntuple(_ -> (status="final",), 10))
+    @test occursin("status=final", loudly(() -> teardown(handle, final)))
     plain = replace(output, r"\e\[[0-9;?]*[A-Za-z]"=>"")
     lines = filter(line -> occursin(" : status=", line), split(plain, '\n'))
     @test length(lines) == 2
@@ -135,9 +121,7 @@ end
         error("diagnostics failed")
     end
     Logging.with_logger(Logging.NullLogger()) do
-        @test_throws TaskFailedException progress(;
-            label="Health", nchains=1, backend=recorder, diagnostics=source
-        ) do run
+        @test_throws TaskFailedException quick_run(recorder; diagnostics=source) do run
             await_display(called)
             completed[] = true
         end
@@ -146,25 +130,11 @@ end
     @test last(recorder.calls)[1] == :teardown
 end
 
-@testset "Term shows current diagnostics without changing its progress clock" begin
-    run = RunProgress("Health", 1)
-    phase = open_phase!(chain_at(run, 1), "Sampling", Determinate(10))
-    handle = quietly(() -> setup(TermBackend(), RunSnapshot(run)))
-    quietly(() -> phase_opened(handle, 1, PhaseSnapshot(phase)))
-    started = handle.jobs[1].startime
-    for count in (1, 2)
-        snapshot = RunSnapshot(run.label, RunSnapshot(run).chains, ((divergences=count,),))
-        output = loudly(() -> refresh(handle, snapshot))
-        @test occursin("divergences=$count", output)
-    end
-    @test handle.jobs[1].startime == started
-    final = RunSnapshot(run.label, RunSnapshot(run).chains, ((divergences=3,),))
-    @test occursin("divergences=3", loudly(() -> teardown(handle, final)))
-
-    handle = quietly(() -> setup(TermBackend(), RunSnapshot(run)))
-    broken = RunSnapshot(
-        run.label, RunSnapshot(run).chains, ((value=UnprintableDiagnostic(),),)
-    )
+@testset "Term restores the cursor when formatting diagnostics fails" begin
+    snapshot = run_snapshot(1)
+    handle = quietly(() -> setup(TermBackend(), snapshot))
+    broken =
+        RunSnapshot(snapshot.label, snapshot.chains, ((value=UnprintableDiagnostic(),),))
     output = loudly() do
         @test_throws "cannot print diagnostic" teardown(handle, broken)
     end

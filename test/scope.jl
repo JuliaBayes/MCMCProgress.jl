@@ -130,8 +130,8 @@ MCMCProgress.teardown(backend::SlowRefreshBackend, ::RunSnapshot) =
 # 20 ms, so a body lasting 0.1 s sees several refreshes.
 const TEST_PERIOD = UInt64(20_000_000)
 
-quick_run(f, backend; nchains::Integer=1, period::UInt64=TEST_PERIOD) =
-    MCMCProgress.display_run(f, "Sampling mymodel", nchains, backend, period)
+quick_run(f, backend; nchains::Integer=1, period::UInt64=TEST_PERIOD, diagnostics=nothing) =
+    MCMCProgress.display_run(f, "Sampling mymodel", nchains, backend, period; diagnostics)
 
 call_names(backend::MCMCProgress.RecordingBackend) = [call[1] for call in backend.calls]
 
