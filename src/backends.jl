@@ -40,6 +40,9 @@ backend tells them apart by `phase.id`.
 """
 phase_opened(handle, chain_index::Integer, phase::PhaseSnapshot) = nothing
 
+# Carry snapshot fields to built-in displays without changing backend callbacks.
+_phase_opened(handle, i, phase, diagnostics) = phase_opened(handle, i, phase)
+
 """
     phase_closed(handle, chain_index::Integer, phase::PhaseSnapshot)
 
@@ -175,6 +178,8 @@ end
 
 phase_opened(group::BackendHandles, i::Integer, phase::PhaseSnapshot) =
     foreach(handle -> phase_opened(handle, i, phase), group.handles)
+_phase_opened(group::BackendHandles, i, phase, diagnostics) =
+    foreach(handle -> _phase_opened(handle, i, phase, diagnostics), group.handles)
 phase_closed(group::BackendHandles, i::Integer, phase::PhaseSnapshot) =
     foreach(handle -> phase_closed(handle, i, phase), group.handles)
 refresh(group::BackendHandles, snapshot::RunSnapshot) =
