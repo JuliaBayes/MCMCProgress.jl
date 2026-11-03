@@ -14,4 +14,4 @@ MCMCProgress.jl also features several backends to render those reports in differ
 - `TermBackend` creates fancy progress bars in the terminal with [Term.jl](https://github.com/FedeClaudi/Term.jl).
 - `ProgressLoggingBackend` uses [ProgressLogging.jl](https://github.com/JuliaLogging/ProgressLogging.jl). It is better tested across different platforms than `TermBackend` but not quite as fancy.
 
-To use `TermBackend` or `ProgressLoggingBackend`, you will have to lead Term.jl or ProgressLogging.jl, respectively.
+To use `TermBackend` or `ProgressLoggingBackend`, you will have to load Term.jl or ProgressLogging.jl, respectively.
