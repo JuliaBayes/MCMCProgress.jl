@@ -1,6 +1,6 @@
 name = "MCMCProgress"
 uuid = "06619955-6986-4d5d-aa75-cd81f72cf3a1"
-version = "1.0.0-DEV"
+version = "0.1.0"
 authors = ["simonsteiger <simon.j.steiger@gmail.com> and contributors"]
 
 [deps]
