@@ -141,7 +141,7 @@ end
 nchains = 4
 draws = progress(; label="HMC", nchains, backend=PlainTextBackend()) do run
     dim = 10
-    tasks = [Threads.@spawn sample(chain_at(run, j), dim) for j in 1:nchains]
+    tasks = @sync [Threads.@spawn sample(chain_at(run, j), dim) for j in 1:nchains]
     fetch.(tasks)
 end
 nothing # hide

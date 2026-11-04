@@ -63,6 +63,7 @@ Base.isopen(p::Phase) = @atomic :monotonic p.open
     advance!(phase::Phase, i::Int)
 
 Record that `phase` has reached the absolute position `i`.
+For a `Binary` phase this is always a no-op, even after closure.
 """
 advance!(::Phase{Binary}, ::Int) = nothing
 function advance!(p::Phase{Counting}, i::Int)
@@ -94,7 +95,8 @@ end
 
 Record that `phase` is over.
 
-Closing a phase records its final position, and prevents it from being advanced or closed again.
+Closing a phase records its final position and prevents it from being closed again.
+It also prevents advancement for `Determinate` and `Counting` phases.
 """
 function close_phase!(p::Phase)
     lock(p.lock) do
