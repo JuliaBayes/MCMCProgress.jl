@@ -159,10 +159,10 @@ If the backend throws while refreshing, the error is logged at once and the
 display stops, but `f` keeps running; the failure is thrown again when `f`
 returns.
 
-`f` must wait for every task it spawns before returning, as `@sync` does below. A
-task still reporting after `progress` returns finds its phase closed, and its
-next [`advance!`](@ref) on a `Determinate` or `Counting` phase throws an error that
-nothing observes. Reports on `Binary` phases remain no-ops.
+`f` must wait for all tasks it starts before returning. Use `@sync`, as in the
+example below. Otherwise, workers can keep running after `progress` closes their
+phases. Their next [`advance!`](@ref) call will then throw, unless the phase is
+`Binary`, where `advance!` always does nothing.
 
 Ctrl-C delivers an `InterruptException` to the main task. It reaches `f` only when
 `progress` is called from the main task, as it is at the REPL. It does not stop
