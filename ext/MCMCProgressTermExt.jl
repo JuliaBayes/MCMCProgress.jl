@@ -2,6 +2,7 @@ module MCMCProgressTermExt
 
 using MCMCProgress: MCMCProgress, TermBackend, PhaseSnapshot, RunSnapshot, Determinate
 import MCMCProgress: setup, phase_opened, phase_closed, refresh, teardown
+using Term: Measure, str_trunc
 using Term.Progress:
     ProgressBar,
     ProgressJob,
@@ -9,6 +10,7 @@ using Term.Progress:
     start!,
     stop!,
     render,
+    setwidth!,
     DescriptionColumn,
     SeparatorColumn,
     ProgressColumn,
@@ -89,6 +91,12 @@ function setup(backend::TermBackend, snapshot::RunSnapshot)
         columns_kwargs=backend.columns_kwargs,
         title=snapshot.label,
     )
+    # Leave room for title padding and a wide character at the truncation boundary.
+    pbar.title = if pbar.width > 4
+        str_trunc(pbar.title, pbar.width - 4; trailing_dots="…")
+    else
+        ""
+    end
     template_columns = copy(pbar.columns)
     jobs = Dict{Int,ProgressJob}()
     for chain in snapshot.chains
@@ -100,6 +108,33 @@ function setup(backend::TermBackend, snapshot::RunSnapshot)
     # once; a job added to a running bar scrolls the terminal.
     start!(pbar)
     return TermHandle(pbar, template_columns, jobs)
+end
+
+# Term assigns negative bar widths when text columns exceed the terminal width.
+# Size the rendered description after Term has applied the column configuration.
+function _fit_columns!(job::ProgressJob)
+    any(c -> c isa ProgressColumn, job.columns) || return nothing
+    non_progress_width =
+        sum((c.measure.w for c in job.columns if !(c isa ProgressColumn)); init=0)
+    remaining = job.width - length(job.columns) + 1 - non_progress_width
+    for column in job.columns
+        if column isa DescriptionColumn && remaining < 1
+            width = max(0, column.measure.w + remaining - 1)
+            text = if width == 0
+                ""
+            else
+                str_trunc(column.text, width; trailing_dots="…")
+            end
+            measure = Measure(text)
+            remaining += column.measure.w - measure.w
+            column.text = text
+            column.measure = measure
+        end
+    end
+    for column in job.columns
+        column isa ProgressColumn && setwidth!(column, max(0, remaining))
+    end
+    return nothing
 end
 
 # Reset a chain's job for a new phase: fresh columns, position zero, and a new
@@ -114,6 +149,7 @@ function _restart!(handle::TermHandle, job::ProgressJob, description, total)
     job.started = false
     job.columns = copy(handle.template_columns)
     start!(job)
+    _fit_columns!(job)
     return job
 end
 

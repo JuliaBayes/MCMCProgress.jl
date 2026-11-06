@@ -14,6 +14,8 @@ keyword arguments to individual columns, keyed by column type name, as
 `Term.Progress.ProgressBar` accepts them.
 
 A zero-step phase uses a spinner while open and a completion tick when closed.
+Long titles are shortened to fit. Descriptions are shortened when needed to leave
+room for a progress bar. If other columns fill the terminal, the bar has zero width.
 """
 struct TermBackend{C}
     columns::C
@@ -22,7 +24,7 @@ struct TermBackend{C}
     TermBackend{C}(columns, columns_kwargs) where {C} = new{C}(columns, columns_kwargs)
 end
 
-TermBackend(columns=nothing; columns_kwargs::Dict{Symbol,Any}=Dict{Symbol,Any}()) =
+TermBackend(columns=nothing; columns_kwargs=Dict{Symbol,Any}()) =
     TermBackend{typeof(columns)}(columns, columns_kwargs)
 
 backend_package(::TermBackend) = "Term"

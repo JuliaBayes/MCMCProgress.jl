@@ -205,7 +205,7 @@ end
     @test handle.template_columns == custom_columns
 
     kwargs_backend = MCMCProgress.TermBackend(;
-        columns_kwargs=Dict{Symbol,Any}(:DescriptionColumn => Dict(:style => "red")),
+        columns_kwargs=Dict(:DescriptionColumn => Dict(:style => "red")),
     )
     handle2 = quietly() do
         setup(kwargs_backend, rs0)
@@ -216,6 +216,41 @@ end
     quietly() do
         teardown(handle, rs0)
         teardown(handle2, rs0)
+    end
+end
+
+@testset "long labels render with narrow and custom layouts" begin
+    saved_width = Term.ACTIVE_CONSOLE_WIDTH[]
+    custom = DataType[
+        Term.Progress.DescriptionColumn,
+        Term.Progress.ProgressColumn,
+        Term.Progress.PercentageColumn,
+    ]
+    try
+        for (width, columns, name, expected) in (
+            (80, nothing, "Sampling posterior predictive draws", "100%"),
+            (40, nothing, "Sampling", "100%"),
+            (80, custom, "推定"^50, "100%"),
+            (80, DataType[Term.Progress.ProgressColumn], "Sampling", "━"^75),
+        )
+            Term.Consoles.enable(Term.Consoles.Console(width))
+            drawn = loudly() do
+                result = progress(;
+                    label=name,
+                    nchains=1,
+                    backend=(TermBackend(columns), PlainTextBackend(IOBuffer())),
+                ) do run
+                    p = open_phase!(chain_at(run, 1), name, Determinate(100))
+                    advance!(p, 100)
+                    close_phase!(p)
+                    :samples
+                end
+                @test result === :samples
+            end
+            @test occursin(expected, Term.cleantext(drawn))
+        end
+    finally
+        Term.ACTIVE_CONSOLE_WIDTH[] = saved_width
     end
 end
 
