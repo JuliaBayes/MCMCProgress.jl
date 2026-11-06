@@ -114,9 +114,9 @@ end
 # Size the rendered description after Term has applied the column configuration.
 function _fit_columns!(job::ProgressJob)
     any(c -> c isa ProgressColumn, job.columns) || return nothing
-    remaining =
-        job.width - length(job.columns) + 1 -
+    non_progress_width =
         sum((c.measure.w for c in job.columns if !(c isa ProgressColumn)); init=0)
+    remaining = job.width - length(job.columns) + 1 - non_progress_width
     for column in job.columns
         if column isa DescriptionColumn && remaining < 1
             width = max(0, column.measure.w + remaining - 1)
