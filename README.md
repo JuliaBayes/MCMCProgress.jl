@@ -15,3 +15,14 @@ MCMCProgress.jl also features several backends to render those reports in differ
 - `ProgressLoggingBackend` uses [ProgressLogging.jl](https://github.com/JuliaLogging/ProgressLogging.jl). It is better tested across different platforms than `TermBackend` but not quite as fancy.
 
 To use `TermBackend` or `ProgressLoggingBackend`, you will have to load Term.jl or ProgressLogging.jl, respectively.
+
+## Example gallery
+
+From a checkout, install the example dependencies and run the gallery:
+
+```sh
+julia --project=examples -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate()'
+julia --project=examples examples/gallery.jl --help
+```
+
+The explicit `Pkg.develop` also selects the checkout on Julia 1.10, which does not support `[sources]`.

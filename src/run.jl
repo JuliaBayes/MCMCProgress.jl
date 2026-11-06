@@ -25,14 +25,14 @@ Get the progress object for the `i`-th chain in `run`.
 chain_at(run::RunProgress, index::Integer) = run.chains[index]
 
 """
-    num_chains(run::Run) -> Int
+    num_chains(run::RunProgress) -> Int
 
 The number of chains in `run`.
 """
 num_chains(run::RunProgress) = length(run.chains)
 
 """
-    chains(run::Run) -> Vector{ChainProgress}
+    chains(run::RunProgress) -> Tuple{Vararg{ChainProgress}}
 
 All the progress items for the chains in `run`.
 """
