@@ -1,6 +1,6 @@
 # MCMCProgress.jl
 
-[![Stable docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://juliabayes.org/MCMCProgress.jl/)
+[![Stable docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://juliabayes.org/MCMCProgress.jl/) <a href="https://juliabayes.org/MCMCProgress.jl/"><img src="/docs/src/assets/logo.svg" align="right" alt="MCMCProgress.jl logo" style="height: 140px;"></a>
 [![Build Status](https://github.com/simonsteiger/MCMCProgress.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/simonsteiger/MCMCProgress.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
 This package provides a common interface to monitor the progress of MCMC samplers.
