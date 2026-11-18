@@ -2,6 +2,19 @@
 capture_progress_logs(f) =
     Test.collect_test_logs(f; min_level=ProgressLogging.ProgressLevel)
 
+struct RejectProgressOpen <: Logging.AbstractLogger
+    id::Ref{Union{Nothing,Base.UUID}}
+end
+Logging.min_enabled_level(::RejectProgressOpen) = ProgressLogging.ProgressLevel
+Logging.shouldlog(::RejectProgressOpen, args...) = true
+Logging.catch_exceptions(::RejectProgressOpen) = false
+function Logging.handle_message(
+    logger::RejectProgressOpen, level, message, mod, group, id, file, line; kwargs...,
+)
+    logger.id[] = id
+    error("progress logger rejected the opening record")
+end
+
 struct PhaseCallbackFailure
     callback::Symbol
     persistent::Bool
@@ -110,6 +123,23 @@ end
     end
     @test logs[2].kwargs[:progress] == "done"
     @test logs[1].id == logs[2].id  # the close reports under the id the open minted
+end
+
+@testset "a rejected opening record can be retried with the same ID" begin
+    backend = MCMCProgress.ProgressLoggingBackend()
+    handle = setup(backend, RunSnapshot("Sampling", (ChainSnapshot(1, (), nothing),)))
+    phase = PhaseSnapshot(UInt(1), "Warmup", Determinate(10), 0, UInt64(0), nothing)
+    logger = RejectProgressOpen(Ref{Union{Nothing,Base.UUID}}(nothing))
+
+    Logging.with_logger(logger) do
+        @test_throws ErrorException phase_opened(handle, 1, phase)
+    end
+    logs, _ = capture_progress_logs() do
+        phase_opened(handle, 1, phase)
+        phase_closed(handle, 1, phase)
+    end
+    @test [(log.id, log.kwargs[:progress]) for log in logs] ==
+          [(logger.id[], 0.0), (logger.id[], "done")]
 end
 
 @testset "refresh skips unchanged and small updates but preserves phase boundaries" begin

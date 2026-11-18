@@ -1,7 +1,8 @@
 # Unreleased
 
-ProgressLogging skips unchanged updates and limits intermediate determinate updates
-to half-percentage-point changes. It still reports phase opens and closes.
+ProgressLogging skips unchanged updates and reports determinate changes of at
+least half a percentage point. It still reports phase opens, closes, and
+transitions to or from 100% seen during refresh.
 
 # 0.1.0
 

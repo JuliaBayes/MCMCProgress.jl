@@ -42,11 +42,14 @@ function phase_opened(
     chain_index::Integer,
     phase::PhaseSnapshot,
 )
-    haskey(handle.phases, phase.id) && return nothing
-    name = "chain $chain_index/$(handle.n_chains): $(phase.name)"
-    state = LoggedPhase(uuid4(), name, phase.position)
-    handle.phases[phase.id] = state
+    state = get!(handle.phases, phase.id) do
+        name = "chain $chain_index/$(handle.n_chains): $(phase.name)"
+        LoggedPhase(uuid4(), name, phase.position)
+    end
     emit_progress(state, _fraction(phase))
+    if state.position != phase.position
+        handle.phases[phase.id] = LoggedPhase(state.id, state.name, phase.position)
+    end
     return nothing
 end
 
@@ -73,7 +76,8 @@ function refresh(handle::ProgressLoggingHandle, snapshot::RunSnapshot)
         previous = state.position
         position == previous && continue
         total = phase.kind.total
-        if max(position, previous) < total && abs(position - previous) < cld(total, UPDATES_PER_TOTAL)
+        if max(position, previous) < total &&
+           abs(position - previous) < cld(total, UPDATES_PER_TOTAL)
             continue
         end
         emit_progress(state, _fraction(phase))
