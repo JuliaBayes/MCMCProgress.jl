@@ -9,9 +9,9 @@ using UUIDs: UUID, uuid4
 
 MCMCProgress.is_loaded(::ProgressLoggingBackend) = true
 
-struct LoggedPhase
-    id::UUID
-    name::String
+mutable struct LoggedPhase
+    const id::UUID
+    const name::String
     position::Int
 end
 
@@ -32,8 +32,9 @@ _fraction(::PhaseSnapshot) = nothing
 
 const UPDATES_PER_TOTAL = 200
 
-function emit_progress(phase::LoggedPhase, value)
-    @logmsg ProgressLevel phase.name progress = value _id = phase.id
+function log_position!(state::LoggedPhase, phase::PhaseSnapshot)
+    @logmsg ProgressLevel state.name progress = _fraction(phase) _id = state.id
+    state.position = phase.position
     return nothing
 end
 
@@ -46,21 +47,13 @@ function phase_opened(
         name = "chain $chain_index/$(handle.n_chains): $(phase.name)"
         LoggedPhase(uuid4(), name, phase.position)
     end
-    emit_progress(state, _fraction(phase))
-    if state.position != phase.position
-        handle.phases[phase.id] = LoggedPhase(state.id, state.name, phase.position)
-    end
-    return nothing
+    return log_position!(state, phase)
 end
 
-function phase_closed(
-    handle::ProgressLoggingHandle,
-    chain_index::Integer,
-    phase::PhaseSnapshot,
-)
+function phase_closed(handle::ProgressLoggingHandle, ::Integer, phase::PhaseSnapshot)
     state = pop!(handle.phases, phase.id, nothing)
     state === nothing && return nothing
-    emit_progress(state, "done")
+    @logmsg ProgressLevel state.name progress = "done" _id = state.id
     return nothing
 end
 
@@ -80,8 +73,7 @@ function refresh(handle::ProgressLoggingHandle, snapshot::RunSnapshot)
            abs(position - previous) < cld(total, UPDATES_PER_TOTAL)
             continue
         end
-        emit_progress(state, _fraction(phase))
-        handle.phases[phase.id] = LoggedPhase(state.id, state.name, position)
+        log_position!(state, phase)
     end
     return nothing
 end
