@@ -168,7 +168,7 @@ middling(xs) = sort(xs)[(length(xs)+1)÷2]
     @test final.chains[1].phases[1].position == 10
 end
 
-@testset "progress uses the process-wide default backend when given none" begin
+@testset "progress accepts an empty tuple and uses the default when omitted" begin
     saved_default = MCMCProgress._DEFAULT_BACKEND[]
     try
         backend = MCMCProgress.RecordingBackend()
@@ -178,6 +178,9 @@ end
         end
         @test first(call_names(backend)) === :setup
         @test last(call_names(backend)) === :teardown
+        empty!(backend.calls)
+        @test quick_run(_ -> :sampled, ()) === :sampled
+        @test isempty(backend.calls)
     finally
         MCMCProgress._DEFAULT_BACKEND[] = saved_default
     end

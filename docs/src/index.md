@@ -6,3 +6,15 @@ It provides a backend-agnostic interface which sampling packages can use to regi
 - A plain text backend, which simply prints updates (useful when running non-interactively, e.g. on a cluster);
 - A [Term.jl](https://github.com/FedeClaudi/Term.jl) backend, which provides beautiful progress updates in terminals;
 - A [ProgressLogging.jl](https://github.com/JuliaLogging/ProgressLogging.jl) backend, which is less fancy than the Term.jl backend, but is better tested across different platforms.
+
+## Choosing a backend
+
+The `backend` keyword controls how `progress` displays a run.
+
+- If you omit `backend` or pass `backend=nothing`, the default is `PlainTextBackend()`. You can change it for the current Julia process with `MCMCProgress.set_backend!`.
+- Use `backend=()` to run without a display. The sampler can still report progress.
+- Use a tuple to display progress in several ways at once. For example, `backend=(PlainTextBackend(), ProgressLoggingBackend())` prints plain text and sends progress logs.
+
+Load `Term` before using `TermBackend()` and `ProgressLogging` before using `ProgressLoggingBackend()`.
+In VS Code, run the sampler in the Julia extension's REPL with progress display enabled.
+In Pluto, the progress bars appear in the logs of the cell that runs the sampler.
