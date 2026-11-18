@@ -112,6 +112,36 @@ end
     @test logs[1].id == logs[2].id  # the close reports under the id the open minted
 end
 
+@testset "refresh skips unchanged and small updates but preserves phase boundaries" begin
+    backend = MCMCProgress.ProgressLoggingBackend()
+    phase(position, closed=nothing) =
+        PhaseSnapshot(UInt(1), "Warmup", Determinate(1000), position, UInt64(0), closed)
+    counting = PhaseSnapshot(UInt(2), "Adapting", Counting(), 0, UInt64(0), nothing)
+    snapshot(p) = RunSnapshot(
+        "Sampling",
+        (ChainSnapshot(1, (p,), nothing), ChainSnapshot(2, (counting,), nothing)),
+    )
+    handle = setup(backend, snapshot(phase(0)))
+
+    logs, _ = capture_progress_logs() do
+        phase_opened(handle, 1, phase(0))
+        phase_opened(handle, 2, counting)
+        for position in (0, 1, 5, 5, 10, 15, 999, 1000, 999)
+            refresh(handle, snapshot(phase(position)))
+        end
+        phase_closed(handle, 1, phase(999, UInt64(1)))
+        phase_closed(
+            handle, 2, PhaseSnapshot(UInt(2), "Adapting", Counting(), 12, UInt64(0), UInt64(1)),
+        )
+    end
+
+    warmup = filter(log -> log.id == logs[1].id, logs)
+    adapting = filter(log -> log.id == logs[2].id, logs)
+    @test [log.kwargs[:progress] for log in warmup] ==
+          [0.0, 0.005, 0.01, 0.015, 0.999, 1.0, 0.999, "done"]
+    @test [log.kwargs[:progress] for log in adapting] == [nothing, "done"]
+end
+
 @testset "a fresh UUID per phase, distinct even when two phases share a name" begin
     backend = MCMCProgress.ProgressLoggingBackend()
     rs0 = RunSnapshot("Sampling mymodel", (ChainSnapshot(1, (), nothing),))

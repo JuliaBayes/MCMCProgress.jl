@@ -9,20 +9,19 @@ using UUIDs: UUID, uuid4
 
 MCMCProgress.is_loaded(::ProgressLoggingBackend) = true
 
-"""
-    ProgressLoggingHandle
+struct LoggedPhase
+    id::UUID
+    name::String
+    position::Int
+end
 
-The mutable state behind [`ProgressLoggingBackend`](@ref MCMCProgress.ProgressLoggingBackend):
-maps each open phase's `id` to the `UUID` that all of that phase's log records
-use.
-"""
 struct ProgressLoggingHandle
     n_chains::Int
-    ids::Dict{UInt,UUID}
+    phases::Dict{UInt,LoggedPhase}
 end
 
 setup(::ProgressLoggingBackend, snapshot::RunSnapshot) =
-    ProgressLoggingHandle(length(snapshot.chains), Dict{UInt,UUID}())
+    ProgressLoggingHandle(length(snapshot.chains), Dict{UInt,LoggedPhase}())
 
 # ProgressLogging's `progress` value: a determinate phase's fraction of its
 # total, and `nothing` for a counting or binary phase, which is how
@@ -31,18 +30,23 @@ _fraction(phase::PhaseSnapshot{Determinate}) =
     phase.kind.total == 0 ? 1.0 : phase.position / phase.kind.total
 _fraction(::PhaseSnapshot) = nothing
 
-# A record has no field for the chain, so its name carries the chain index.
-_bar_name(handle, chain_index, phase) =
-    "chain $chain_index/$(handle.n_chains): $(phase.name)"
+const UPDATES_PER_TOTAL = 200
+
+function emit_progress(phase::LoggedPhase, value)
+    @logmsg ProgressLevel phase.name progress = value _id = phase.id
+    return nothing
+end
 
 function phase_opened(
     handle::ProgressLoggingHandle,
     chain_index::Integer,
     phase::PhaseSnapshot,
 )
-    id = get!(uuid4, handle.ids, phase.id)
-    @logmsg ProgressLevel _bar_name(handle, chain_index, phase) progress =
-        _fraction(phase) _id = id
+    haskey(handle.phases, phase.id) && return nothing
+    name = "chain $chain_index/$(handle.n_chains): $(phase.name)"
+    state = LoggedPhase(uuid4(), name, phase.position)
+    handle.phases[phase.id] = state
+    emit_progress(state, _fraction(phase))
     return nothing
 end
 
@@ -51,26 +55,35 @@ function phase_closed(
     chain_index::Integer,
     phase::PhaseSnapshot,
 )
-    id = pop!(handle.ids, phase.id, nothing)
-    id === nothing && return nothing
-    @logmsg ProgressLevel _bar_name(handle, chain_index, phase) progress = "done" _id = id
+    state = pop!(handle.phases, phase.id, nothing)
+    state === nothing && return nothing
+    emit_progress(state, "done")
     return nothing
 end
 
 function refresh(handle::ProgressLoggingHandle, snapshot::RunSnapshot)
     for chain in snapshot.chains
-        for phase in chain.phases
-            phase.closed === nothing || continue
-            id = handle.ids[phase.id]
-            @logmsg ProgressLevel _bar_name(handle, chain.index, phase) progress =
-                _fraction(phase) _id = id
+        # A chain can only have its latest phase open.
+        isempty(chain.phases) && continue
+        phase = last(chain.phases)
+        phase.closed === nothing || continue
+        phase.kind isa Determinate || continue
+        state = handle.phases[phase.id]
+        position = phase.position
+        previous = state.position
+        position == previous && continue
+        total = phase.kind.total
+        if max(position, previous) < total && abs(position - previous) < cld(total, UPDATES_PER_TOTAL)
+            continue
         end
+        emit_progress(state, _fraction(phase))
+        handle.phases[phase.id] = LoggedPhase(state.id, state.name, position)
     end
     return nothing
 end
 
 function teardown(handle::ProgressLoggingHandle, snapshot::RunSnapshot)
-    isempty(handle.ids) && return nothing
+    isempty(handle.phases) && return nothing
     # A sibling callback can prevent the final close announcement.
     for chain in snapshot.chains, phase in chain.phases
         phase_closed(handle, chain.index, phase)

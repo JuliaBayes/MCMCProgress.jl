@@ -1,12 +1,13 @@
 """
     ProgressLoggingBackend()
 
-A backend that emits one [ProgressLogging.jl](https://github.com/JuliaLogging/ProgressLogging.jl)
-log record per phase, displayed by whatever logger the session has installed.
+A backend that emits [ProgressLogging.jl](https://github.com/JuliaLogging/ProgressLogging.jl)
+records for phase opens, updates, and closes, displayed by the session logger.
 Requires `using ProgressLogging`.
 
-A record has only a name and a fraction, so the name gives both the chain index
-and the phase name.
+Determinate phases report changes of at least half a percentage point and all
+transitions to or from 100% observed during refresh. Counting and binary phases
+report indeterminate progress on open. Every phase reports its close.
 """
 struct ProgressLoggingBackend end
 
