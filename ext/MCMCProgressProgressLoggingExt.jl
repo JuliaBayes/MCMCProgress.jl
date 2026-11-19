@@ -59,7 +59,7 @@ end
 
 function refresh(handle::ProgressLoggingHandle, snapshot::RunSnapshot)
     for chain in snapshot.chains
-        # A chain can only have its latest phase open.
+        # Only the last phase of a chain can be open
         isempty(chain.phases) && continue
         phase = last(chain.phases)
         phase.closed === nothing || continue
@@ -69,8 +69,8 @@ function refresh(handle::ProgressLoggingHandle, snapshot::RunSnapshot)
         previous = state.position
         position == previous && continue
         total = phase.kind.total
-        if max(position, previous) < total &&
-           abs(position - previous) < cld(total, UPDATES_PER_TOTAL)
+        step = cld(total, UPDATES_PER_TOTAL)
+        if max(position, previous) < total && abs(position - previous) < step
             continue
         end
         log_position!(state, phase)
