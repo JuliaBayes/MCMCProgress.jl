@@ -2,6 +2,19 @@
 capture_progress_logs(f) =
     Test.collect_test_logs(f; min_level=ProgressLogging.ProgressLevel)
 
+struct RejectProgressOpen <: Logging.AbstractLogger
+    id::Ref{Union{Nothing,Base.UUID}}
+end
+Logging.min_enabled_level(::RejectProgressOpen) = ProgressLogging.ProgressLevel
+Logging.shouldlog(::RejectProgressOpen, args...) = true
+Logging.catch_exceptions(::RejectProgressOpen) = false
+function Logging.handle_message(
+    logger::RejectProgressOpen, level, message, mod, group, id, file, line; kwargs...,
+)
+    logger.id[] = id
+    error("progress logger rejected the opening record")
+end
+
 struct PhaseCallbackFailure
     callback::Symbol
     persistent::Bool
@@ -73,43 +86,52 @@ end
     @test logs[1].message == "chain 2/2: Warmup"
 end
 
-@testset "a determinate phase reports a fraction; counting and binary report nothing" begin
+@testset "refresh throttles determinate updates and skips indeterminate updates" begin
     backend = MCMCProgress.ProgressLoggingBackend()
     rs0 = RunSnapshot("Sampling mymodel", (ChainSnapshot(1, (), nothing),))
     handle = setup(backend, rs0)
+    snapshot(p) = RunSnapshot(rs0.label, (ChainSnapshot(1, (p,), nothing),))
+    determinate(position) =
+        PhaseSnapshot(UInt(1), "Warmup", Determinate(1000), position, UInt64(0), nothing)
 
-    det_open = PhaseSnapshot(UInt(1), "Warmup", Determinate(4), 0, UInt64(0), nothing)
-    det_mid = PhaseSnapshot(UInt(1), "Warmup", Determinate(4), 2, UInt64(0), nothing)
     logs, _ = capture_progress_logs() do
-        phase_opened(handle, 1, det_open)
-        refresh(handle, RunSnapshot(rs0.label, (ChainSnapshot(1, (det_mid,), nothing),)))
+        phase_opened(handle, 1, determinate(0))
+        for position in (0, 1, 5, 5, 10, 15, 500, 999, 1000, 999)
+            refresh(handle, snapshot(determinate(position)))
+        end
     end
-    @test logs[1].kwargs[:progress] == 0.0
-    @test logs[2].kwargs[:progress] == 0.5
+    @test [log.kwargs[:progress] for log in logs] ==
+          [0.0, 0.005, 0.01, 0.015, 0.5, 0.999, 1.0, 0.999]
 
     count_open = PhaseSnapshot(UInt(2), "Adapting", Counting(), 0, UInt64(0), nothing)
     binary_open =
         PhaseSnapshot(UInt(3), "Finding step size", Binary(), 0, UInt64(0), nothing)
     logs2, _ = capture_progress_logs() do
         phase_opened(handle, 1, count_open)
+        refresh(handle, snapshot(count_open))
         phase_opened(handle, 1, binary_open)
+        refresh(handle, snapshot(binary_open))
     end
-    @test all(r -> r.kwargs[:progress] === nothing, logs2)
+    @test [log.kwargs[:progress] for log in logs2] == [nothing, nothing]
 end
 
-@testset "a closing phase reports \"done\"" begin
+@testset "retrying a rejected open preserves the phase ID through close" begin
     backend = MCMCProgress.ProgressLoggingBackend()
     rs0 = RunSnapshot("Sampling mymodel", (ChainSnapshot(1, (), nothing),))
     handle = setup(backend, rs0)
     p_open = PhaseSnapshot(UInt(1), "Warmup", Binary(), 0, UInt64(0), nothing)
     p_closed = PhaseSnapshot(UInt(1), "Warmup", Binary(), 0, UInt64(0), UInt64(1))
+    logger = RejectProgressOpen(Ref{Union{Nothing,Base.UUID}}(nothing))
 
+    Logging.with_logger(logger) do
+        @test_throws ErrorException phase_opened(handle, 1, p_open)
+    end
     logs, _ = capture_progress_logs() do
         phase_opened(handle, 1, p_open)
         phase_closed(handle, 1, p_closed)
     end
-    @test logs[2].kwargs[:progress] == "done"
-    @test logs[1].id == logs[2].id  # the close reports under the id the open minted
+    @test [(log.id, log.kwargs[:progress]) for log in logs] ==
+          [(logger.id[], nothing), (logger.id[], "done")]
 end
 
 @testset "a fresh UUID per phase, distinct even when two phases share a name" begin
