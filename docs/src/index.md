@@ -16,5 +16,3 @@ You can pick between the backends listed above with the `backend` keyword.
 - Use a tuple to display progress in several ways at once. For example, `backend=(PlainTextBackend(), ProgressLoggingBackend())` prints plain text and sends progress logs.
 
 For `TermBackend()` and `ProgressLoggingBackend()`, you need to load `Term` and `ProgressLogging` first, respectively.
-In VS Code, run the sampler in the Julia extension's REPL with progress display enabled.
-In Pluto, the progress bars appear in the logs of the cell that runs the sampler.
