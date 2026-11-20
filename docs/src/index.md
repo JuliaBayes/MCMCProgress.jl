@@ -9,12 +9,12 @@ It provides a backend-agnostic interface which sampling packages can use to regi
 
 ## Choosing a backend
 
-The `backend` keyword controls how `progress` displays a run.
+You can pick between the backends listed above with the `backend` keyword.
 
 - If you omit `backend` or pass `backend=nothing`, the default is `PlainTextBackend()`. You can change it for the current Julia process with `MCMCProgress.set_backend!`.
 - Use `backend=()` to run without a display. The sampler can still report progress.
 - Use a tuple to display progress in several ways at once. For example, `backend=(PlainTextBackend(), ProgressLoggingBackend())` prints plain text and sends progress logs.
 
-Load `Term` before using `TermBackend()` and `ProgressLogging` before using `ProgressLoggingBackend()`.
+For `TermBackend()` and `ProgressLoggingBackend()`, you need to load `Term` and `ProgressLogging` first, respectively.
 In VS Code, run the sampler in the Julia extension's REPL with progress display enabled.
 In Pluto, the progress bars appear in the logs of the cell that runs the sampler.
