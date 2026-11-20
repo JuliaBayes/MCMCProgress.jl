@@ -99,7 +99,7 @@ _check_backend_loaded(backends::Tuple) = (foreach(_check_backend_loaded, backend
 """
     PlainTextBackend(io::IO=stdout; now=time_ns)
 
-A backend that writes lines of plain text to `io`. It is what
+This backend writes plain text progress bars to `io`. It is what
 `resolve_backend` returns when no other backend is selected, and needs
 no package extension.
 
@@ -116,6 +116,7 @@ end
 PlainTextBackend(io::IO=stdout; now=time_ns) = PlainTextBackend{typeof(now)}(io, now)
 
 const _DEFAULT_BACKEND = Ref{Any}(nothing)
+default_backend() = something(_DEFAULT_BACKEND[], PlainTextBackend())
 
 """
     set_backend!(backend)
@@ -131,26 +132,16 @@ function set_backend!(backend)
 end
 
 """
-    resolve_backend(explicit=nothing)
+    resolve_backend(backend)
 
-The backend a run should use, in order of precedence: `explicit` if it is
-not `nothing`, otherwise the process-wide default set by
-`set_backend!`, otherwise [`PlainTextBackend`](@ref). Throws if the
-resolved backend needs a package extension that is not loaded.
-
-Loading a package extension does not change this result: a backend becomes
-active only once passed here or given to `set_backend!`.
+Return the backend used by a run. Backends can be passed explicitly or
+via `set_backend!`. If `nothing` or `()` is passed, progress recording
+is skipped.
 """
-function resolve_backend(explicit=nothing)
-    backend = if explicit !== nothing
-        explicit
-    elseif _DEFAULT_BACKEND[] !== nothing
-        _DEFAULT_BACKEND[]
-    else
-        PlainTextBackend()
-    end
-    _check_backend_loaded(backend)
-    return backend
+function resolve_backend(backend)
+    resolved = backend === nothing ? () : backend
+    _check_backend_loaded(resolved)
+    return resolved
 end
 
 # Keep custom backends' tuple-valued handles separate from composed handles.

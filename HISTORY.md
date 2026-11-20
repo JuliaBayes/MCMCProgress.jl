@@ -1,4 +1,11 @@
-# Unreleased
+# 0.2.0
+
+## Breaking changes
+
+Instead of reporting progress with `PlainTextBackend()`, passing `backend=nothing` now omits all progress reporting.
+The same can be achieved by passing `backend=()`.
+
+## Other changes
 
 ProgressLogging skips determinate updates smaller than half a percentage point to
 reduce log traffic. It still reports when a phase opens, closes, or transitions
