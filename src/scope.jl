@@ -137,7 +137,7 @@ samples, and return whatever `f` returns.
 
 `backend` selects the backend to display the progress report. If it is omitted,
 the default set by `set_backend!` is used, or [`PlainTextBackend`](@ref) if none is set.
-Pass `()` or `nothing` to skip the display, and `backend=(a, b)` to use multiple displays.
+Pass `()` to skip the display, and `backend=(a, b)` to use multiple displays.
 
 `f` must wait for all tasks it starts before returning. Use `@sync`, as in the
 example below. Otherwise, workers can keep running after `progress` closes their

@@ -2,8 +2,7 @@
 
 ## Breaking changes
 
-Instead of reporting progress with `PlainTextBackend()`, passing `backend=nothing` now omits all progress reporting.
-The same can be achieved by passing `backend=()`.
+Passing `backend=nothing` is no longer supported. Omit the `backend` argument to use the default, and pass `backend=()` to skip the progress display altogether.
 
 ## Other changes
 
