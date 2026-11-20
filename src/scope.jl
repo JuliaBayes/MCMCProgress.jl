@@ -142,6 +142,7 @@ own.
 
 `backend` selects the display. If it is omitted, the default set by
 `set_backend!` is used, or [`PlainTextBackend`](@ref) if none is set.
+Pass `backend=()` to run without a display.
 Pass `backend=(a, b)` to use multiple displays. Callbacks run in tuple order.
 Setup failure cleans up displays already started. Teardown attempts every display.
 Callback failures stop refresh for the group.
