@@ -5,13 +5,13 @@ An abstract type for backends that display or log the progress of an MCMC run.
 
 The `AbstractBackend` interface consists of five functions:
 
-| Function                | Called                      |
-|:----------------------- |:--------------------------- |
-| [`setup`](@ref)         | once, as the run starts     |
-| [`phase_opened`](@ref)  | when a chain enters a phase |
-| [`phase_closed`](@ref)  | when a chain leaves a phase |
-| [`refresh`](@ref)       | on a fixed clock            |
-| [`teardown`](@ref)      | once, as the run ends       |
+| Function        | Called                      |
+|:--------------- |:--------------------------- |
+| `setup`         | once, as the run starts     |
+| `phase_opened`  | when a chain enters a phase |
+| `phase_closed`  | when a chain leaves a phase |
+| `refresh`       | on a fixed clock            |
+| `teardown`      | once, as the run ends       |
 
 `phase_opened` and `phase_closed` default to doing nothing, so the minimal implementation
 consists of only `setup`, `refresh`, and `teardown`.
