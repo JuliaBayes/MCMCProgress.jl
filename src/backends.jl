@@ -94,12 +94,13 @@ function _check_backend_loaded(backend)
     )
 end
 
-_check_backend_loaded(backends::Tuple) = (foreach(_check_backend_loaded, backends); backends)
+_check_backend_loaded(backends::Tuple) =
+    (foreach(_check_backend_loaded, backends); backends)
 
 """
     PlainTextBackend(io::IO=stdout; now=time_ns)
 
-A backend that writes lines of plain text to `io`. It is what
+This backend writes plain text progress bars to `io`. It is what
 `resolve_backend` returns when no other backend is selected, and needs
 no package extension.
 
@@ -116,6 +117,7 @@ end
 PlainTextBackend(io::IO=stdout; now=time_ns) = PlainTextBackend{typeof(now)}(io, now)
 
 const _DEFAULT_BACKEND = Ref{Any}(nothing)
+default_backend() = something(_DEFAULT_BACKEND[], PlainTextBackend())
 
 """
     set_backend!(backend)
@@ -131,24 +133,12 @@ function set_backend!(backend)
 end
 
 """
-    resolve_backend(explicit=nothing)
+    resolve_backend(backend)
 
-The backend a run should use, in order of precedence: `explicit` if it is
-not `nothing`, otherwise the process-wide default set by
-`set_backend!`, otherwise [`PlainTextBackend`](@ref). Throws if the
-resolved backend needs a package extension that is not loaded.
-
-Loading a package extension does not change this result: a backend becomes
-active only once passed here or given to `set_backend!`.
+Return the backend used by a run. Backends can be passed explicitly or
+via `set_backend!`. If `()` is passed, progress recording is skipped.
 """
-function resolve_backend(explicit=nothing)
-    backend = if explicit !== nothing
-        explicit
-    elseif _DEFAULT_BACKEND[] !== nothing
-        _DEFAULT_BACKEND[]
-    else
-        PlainTextBackend()
-    end
+function resolve_backend(backend)
     _check_backend_loaded(backend)
     return backend
 end
@@ -158,7 +148,8 @@ struct BackendHandles{T<:Tuple}
     handles::T
 end
 
-setup(backends::Tuple, snapshot::RunSnapshot) = BackendHandles(_setup_backends(backends, snapshot))
+setup(backends::Tuple, snapshot::RunSnapshot) =
+    BackendHandles(_setup_backends(backends, snapshot))
 
 function _setup_backends(backends::Tuple, snapshot::RunSnapshot)
     isempty(backends) && return ()
@@ -166,7 +157,10 @@ function _setup_backends(backends::Tuple, snapshot::RunSnapshot)
     rest = try
         _setup_backends(Base.tail(backends), snapshot)
     catch exception
-        steps = ["cleaning up a backend after setup failed" => () -> teardown(handle, snapshot)]
+        steps = [
+            "cleaning up a backend after setup failed" =>
+                () -> teardown(handle, snapshot),
+        ]
         run_teardown_steps(steps, exception)
         rethrow()
     end
@@ -180,6 +174,9 @@ phase_closed(group::BackendHandles, i::Integer, phase::PhaseSnapshot) =
 refresh(group::BackendHandles, snapshot::RunSnapshot) =
     foreach(handle -> refresh(handle, snapshot), group.handles)
 teardown(group::BackendHandles, snapshot::RunSnapshot) = run_teardown_steps(
-    ["tearing down backend $i" => () -> teardown(handle, snapshot) for (i, handle) in pairs(group.handles)],
+    [
+        "tearing down backend $i" => () -> teardown(handle, snapshot) for
+        (i, handle) in pairs(group.handles)
+    ],
     nothing,
 )

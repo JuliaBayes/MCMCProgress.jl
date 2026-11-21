@@ -75,14 +75,15 @@ using Dates: Dates
         saved_default = MCMCProgress._DEFAULT_BACKEND[]
         try
             MCMCProgress._DEFAULT_BACKEND[] = nothing
-            @test MCMCProgress.resolve_backend() isa PlainTextBackend
+            @test MCMCProgress.default_backend() isa PlainTextBackend
 
-            default_backend = MCMCProgress.RecordingBackend()
-            set_backend!(default_backend)
-            @test MCMCProgress.resolve_backend() === default_backend  # falls back to the process-wide default
+            process_default = MCMCProgress.RecordingBackend()
+            set_backend!(process_default)
+            @test MCMCProgress.default_backend() === process_default
 
             explicit_backend = MCMCProgress.RecordingBackend()
-            @test MCMCProgress.resolve_backend(explicit_backend) === explicit_backend  # explicit argument wins
+            @test MCMCProgress.resolve_backend(explicit_backend) === explicit_backend
+            @test MCMCProgress.resolve_backend(()) === ()
         finally
             MCMCProgress._DEFAULT_BACKEND[] = saved_default
         end

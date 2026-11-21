@@ -130,50 +130,18 @@ function spawn_refresh(
 end
 
 """
-    progress(f; label, nchains, backend=nothing)
+    progress(f; label, nchains, backend=default_backend())
 
 Display the progress of a run of `nchains` chains called `label` while `f(run)`
 samples, and return whatever `f` returns.
 
-`f` is handed the run to report on: [`chain_at`](@ref) reaches one of its chains,
-and [`open_phase!`](@ref), [`advance!`](@ref) and [`close_phase!`](@ref) report
-that chain's progress. Chains may run on separate tasks, each reporting on its
-own.
-
-`backend` selects the display. If it is omitted, the default set by
-`set_backend!` is used, or [`PlainTextBackend`](@ref) if none is set.
-Pass `backend=()` to run without a display.
-Pass `backend=(a, b)` to use multiple displays. Callbacks run in tuple order.
-Setup failure cleans up displays already started. Teardown attempts every display.
-Callback failures stop refresh for the group.
-
-A separate task refreshes the backend every `REFRESH_PERIOD`
-nanoseconds. Recording a position never waits for the display.
-
-However `f` ends, any phase left open is closed, every chain still running is
-given an outcome, the refresh task stops, and the backend's `teardown`
-is called, which is where a terminal display restores the cursor. An exception
-from `f` is rethrown unchanged and ends the chains still running as `failed`, or
-as `interrupted` for an `InterruptException`.
-
-If the backend throws while refreshing, the error is logged at once and the
-display stops, but `f` keeps running; the failure is thrown again when `f`
-returns.
+`backend` selects the backend to display the progress report. If it is omitted,
+the default set by `set_backend!` is used, or [`PlainTextBackend`](@ref) if none is set.
+Pass `()` to skip the display, and `backend=(a, b)` to use multiple displays.
 
 `f` must wait for all tasks it starts before returning. Use `@sync`, as in the
 example below. Otherwise, workers can keep running after `progress` closes their
-phases. Their next [`advance!`](@ref) call will then throw, unless the phase is
-`Binary`, where `advance!` always does nothing.
-
-Ctrl-C delivers an `InterruptException` to the main task. It reaches `f` only when
-`progress` is called from the main task, as it is at the REPL. It does not stop
-the tasks `f` spawned: when the interrupt leaves a `@sync` block, those tasks keep
-running until they next report on a counted phase or attempt to open or close a
-phase. Binary reports do not stop them.
-When the session has interactive threads, the refresh task runs on that pool,
-which includes the main thread, so an interrupt can occasionally reach the
-refresh task instead of `f`; it then appears as a display failure and `f` keeps
-running.
+phases.
 
 ```julia
 progress(; label="Sampling mymodel", nchains=4) do run
@@ -191,7 +159,7 @@ progress(; label="Sampling mymodel", nchains=4) do run
 end
 ```
 """
-progress(f; label::AbstractString, nchains::Integer, backend=nothing) =
+progress(f; label::AbstractString, nchains::Integer, backend=default_backend()) =
     display_run(f, label, nchains, backend, REFRESH_PERIOD)
 
 # `progress` with an explicit refresh period.
