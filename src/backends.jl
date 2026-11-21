@@ -100,7 +100,7 @@ function _check_backend_loaded(backend::AbstractBackend)
     )
 end
 
-_check_backend_loaded(backends::Tuple) =
+_check_backend_loaded(backends::Tuple{Vararg{AbstractBackend}}) =
     (foreach(_check_backend_loaded, backends); backends)
 
 """
@@ -122,7 +122,8 @@ struct PlainTextBackend{F} <: AbstractBackend
 end
 PlainTextBackend(io::IO=stdout; now=time_ns) = PlainTextBackend{typeof(now)}(io, now)
 
-const _DEFAULT_BACKEND = Ref{Any}(nothing)
+const _DEFAULT_BACKEND =
+    Ref{Union{Nothing,AbstractBackend,Tuple{Vararg{AbstractBackend}}}}(nothing)
 default_backend() = something(_DEFAULT_BACKEND[], PlainTextBackend())
 
 """
@@ -132,7 +133,7 @@ Set the process-wide default backend: what `resolve_backend` returns
 for a run started without an explicit `backend` argument. Can be called from
 `startup.jl`. Throws if `backend` needs a package extension that is not loaded.
 """
-function set_backend!(backend::Union{AbstractBackend,Tuple})
+function set_backend!(backend::Union{AbstractBackend,Tuple{Vararg{AbstractBackend}}})
     _check_backend_loaded(backend)
     _DEFAULT_BACKEND[] = backend
     return backend
@@ -144,7 +145,7 @@ end
 Return the backend used by a run. Backends can be passed explicitly or
 via `set_backend!`. If `()` is passed, progress recording is skipped.
 """
-function resolve_backend(backend)
+function resolve_backend(backend::Union{AbstractBackend,Tuple{Vararg{AbstractBackend}}})
     _check_backend_loaded(backend)
     return backend
 end
@@ -154,10 +155,10 @@ struct BackendHandles{T<:Tuple}
     handles::T
 end
 
-setup(backends::Tuple, snapshot::RunSnapshot) =
+setup(backends::Tuple{Vararg{AbstractBackend}}, snapshot::RunSnapshot) =
     BackendHandles(_setup_backends(backends, snapshot))
 
-function _setup_backends(backends::Tuple, snapshot::RunSnapshot)
+function _setup_backends(backends::Tuple{Vararg{AbstractBackend}}, snapshot::RunSnapshot)
     isempty(backends) && return ()
     handle = setup(first(backends), snapshot)
     rest = try
