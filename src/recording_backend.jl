@@ -1,5 +1,5 @@
 """
-    RecordingBackend()
+    RecordingBackend() <: AbstractBackend
 
 A backend that renders nothing and records every call the interface makes to
 it, in order, in `calls`: `setup`, `phase_opened`, `phase_closed`, `refresh`
@@ -14,7 +14,7 @@ Each entry of `calls` is one of:
     (:refresh, snapshot)
     (:teardown, snapshot)
 """
-mutable struct RecordingBackend
+mutable struct RecordingBackend <: AbstractBackend
     calls::Vector{Any}
 end
 RecordingBackend() = RecordingBackend(Any[])

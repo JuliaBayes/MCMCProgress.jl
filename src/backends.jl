@@ -1,4 +1,29 @@
 """
+    AbstractBackend
+
+An abstract type for backends that display or log the progress of an MCMC run.
+
+The `AbstractBackend` interface consists of five functions:
+
+| Function        | Called                      |
+|:--------------- |:--------------------------- |
+| `setup`         | once, as the run starts     |
+| `phase_opened`  | when a chain enters a phase |
+| `phase_closed`  | when a chain leaves a phase |
+| `refresh`       | on a fixed clock            |
+| `teardown`      | once, as the run ends       |
+
+`phase_opened` and `phase_closed` default to doing nothing, so the minimal implementation
+consists of only `setup`, `refresh`, and `teardown`.
+
+A backend must not throw when a chain opens a phase at any point during the run,
+or when a run ends as `failed` or `interrupted`.
+"""
+abstract type AbstractBackend end
+
+const BackendTuple = Tuple{Vararg{AbstractBackend}}
+
+"""
     setup(backend, snapshot::RunSnapshot) -> handle
 
 Turn `backend` into a handle holding whatever mutable state its display
@@ -8,23 +33,6 @@ with every chain present and no phase open yet.
 Every other function in the interface is called with what `setup` returns
 here, never with `backend` itself.
 
-# The interface
-
-A backend implements up to five functions, called at these points:
-
-| Function                       | Called                      |
-|:------------------------------ |:---------------------------|
-| `setup`                        | once, as the run starts     |
-| `phase_opened`                 | when a chain enters a phase |
-| `phase_closed`                 | when a chain leaves a phase |
-| `refresh`                      | on a fixed clock            |
-| `teardown`                     | once, as the run ends       |
-
-`phase_opened` and `phase_closed` default to doing nothing, so the smallest
-possible backend implements only `setup`, `refresh`, and `teardown`.
-
-A backend must not throw when a chain opens a phase at any point during the run,
-or when a run ends as `failed` or `interrupted`.
 """
 function setup end
 
@@ -74,7 +82,7 @@ package extension overrides this method, so selecting it before its package is
 loaded throws an error naming the package rather than a `MethodError` from
 inside [`setup`](@ref).
 """
-backend_package(::Any) = nothing
+backend_package(::AbstractBackend) = nothing
 
 """
     is_loaded(backend) -> Bool
@@ -82,9 +90,9 @@ backend_package(::Any) = nothing
 Returns `true` if the extension for `backend` is loaded or if `backend`
 doesn't require an extension.
 """
-is_loaded(backend) = backend_package(backend) === nothing
+is_loaded(backend::AbstractBackend) = backend_package(backend) === nothing
 
-function _check_backend_loaded(backend)
+function _check_backend_loaded(backend::AbstractBackend)
     is_loaded(backend) && return nothing
     pkg = backend_package(backend)
     throw(
@@ -94,7 +102,7 @@ function _check_backend_loaded(backend)
     )
 end
 
-_check_backend_loaded(backends::Tuple) =
+_check_backend_loaded(backends::BackendTuple) =
     (foreach(_check_backend_loaded, backends); backends)
 
 """
@@ -108,7 +116,7 @@ no package extension.
 return a `UInt64` count of nanoseconds, as `time_ns` does. It is not called for
 a closed phase.
 """
-struct PlainTextBackend{F}
+struct PlainTextBackend{F} <: AbstractBackend
     io::IO
     now::F
 
@@ -116,7 +124,8 @@ struct PlainTextBackend{F}
 end
 PlainTextBackend(io::IO=stdout; now=time_ns) = PlainTextBackend{typeof(now)}(io, now)
 
-const _DEFAULT_BACKEND = Ref{Any}(nothing)
+const _DEFAULT_BACKEND =
+    Ref{Union{Nothing,AbstractBackend,BackendTuple}}(nothing)
 default_backend() = something(_DEFAULT_BACKEND[], PlainTextBackend())
 
 """
@@ -126,32 +135,31 @@ Set the process-wide default backend: what `resolve_backend` returns
 for a run started without an explicit `backend` argument. Can be called from
 `startup.jl`. Throws if `backend` needs a package extension that is not loaded.
 """
-function set_backend!(backend)
+function set_backend!(backend::Union{AbstractBackend,BackendTuple})
     _check_backend_loaded(backend)
     _DEFAULT_BACKEND[] = backend
     return backend
 end
 
 """
-    resolve_backend(backend)
+    resolve_backend(backend) -> BackendTuple
 
-Return the backend used by a run. Backends can be passed explicitly or
-via `set_backend!`. If `()` is passed, progress recording is skipped.
+Return the backends used by a run, as a tuple. Backends can be passed explicitly or
+via `set_backend!`. A single backend is wrapped in a one-element tuple. If `()` is
+passed, progress recording is skipped.
 """
-function resolve_backend(backend)
-    _check_backend_loaded(backend)
-    return backend
-end
+resolve_backend(backend::AbstractBackend) = resolve_backend((backend,))
+resolve_backend(backends::BackendTuple) = _check_backend_loaded(backends)
 
 # Keep custom backends' tuple-valued handles separate from composed handles.
 struct BackendHandles{T<:Tuple}
     handles::T
 end
 
-setup(backends::Tuple, snapshot::RunSnapshot) =
+setup(backends::BackendTuple, snapshot::RunSnapshot) =
     BackendHandles(_setup_backends(backends, snapshot))
 
-function _setup_backends(backends::Tuple, snapshot::RunSnapshot)
+function _setup_backends(backends::BackendTuple, snapshot::RunSnapshot)
     isempty(backends) && return ()
     handle = setup(first(backends), snapshot)
     rest = try

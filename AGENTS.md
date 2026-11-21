@@ -50,7 +50,7 @@ end
 # Writing a backend
 
 ```
-struct MyBackend end
+struct MyBackend <: AbstractBackend end
 
 MCMCProgress.setup(::MyBackend, snapshot::RunSnapshot) = handle
 MCMCProgress.refresh(handle, snapshot::RunSnapshot) = nothing
