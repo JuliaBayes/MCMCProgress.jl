@@ -21,6 +21,8 @@ or when a run ends as `failed` or `interrupted`.
 """
 abstract type AbstractBackend end
 
+const BackendTuple = Tuple{Vararg{AbstractBackend}}
+
 """
     setup(backend, snapshot::RunSnapshot) -> handle
 
@@ -100,7 +102,7 @@ function _check_backend_loaded(backend::AbstractBackend)
     )
 end
 
-_check_backend_loaded(backends::Tuple{Vararg{AbstractBackend}}) =
+_check_backend_loaded(backends::BackendTuple) =
     (foreach(_check_backend_loaded, backends); backends)
 
 """
@@ -123,7 +125,7 @@ end
 PlainTextBackend(io::IO=stdout; now=time_ns) = PlainTextBackend{typeof(now)}(io, now)
 
 const _DEFAULT_BACKEND =
-    Ref{Union{Nothing,AbstractBackend,Tuple{Vararg{AbstractBackend}}}}(nothing)
+    Ref{Union{Nothing,AbstractBackend,BackendTuple}}(nothing)
 default_backend() = something(_DEFAULT_BACKEND[], PlainTextBackend())
 
 """
@@ -133,32 +135,31 @@ Set the process-wide default backend: what `resolve_backend` returns
 for a run started without an explicit `backend` argument. Can be called from
 `startup.jl`. Throws if `backend` needs a package extension that is not loaded.
 """
-function set_backend!(backend::Union{AbstractBackend,Tuple{Vararg{AbstractBackend}}})
+function set_backend!(backend::Union{AbstractBackend,BackendTuple})
     _check_backend_loaded(backend)
     _DEFAULT_BACKEND[] = backend
     return backend
 end
 
 """
-    resolve_backend(backend)
+    resolve_backend(backend) -> BackendTuple
 
-Return the backend used by a run. Backends can be passed explicitly or
-via `set_backend!`. If `()` is passed, progress recording is skipped.
+Return the backends used by a run, as a tuple. Backends can be passed explicitly or
+via `set_backend!`. A single backend is wrapped in a one-element tuple. If `()` is
+passed, progress recording is skipped.
 """
-function resolve_backend(backend::Union{AbstractBackend,Tuple{Vararg{AbstractBackend}}})
-    _check_backend_loaded(backend)
-    return backend
-end
+resolve_backend(backend::AbstractBackend) = resolve_backend((backend,))
+resolve_backend(backends::BackendTuple) = _check_backend_loaded(backends)
 
 # Keep custom backends' tuple-valued handles separate from composed handles.
 struct BackendHandles{T<:Tuple}
     handles::T
 end
 
-setup(backends::Tuple{Vararg{AbstractBackend}}, snapshot::RunSnapshot) =
+setup(backends::BackendTuple, snapshot::RunSnapshot) =
     BackendHandles(_setup_backends(backends, snapshot))
 
-function _setup_backends(backends::Tuple{Vararg{AbstractBackend}}, snapshot::RunSnapshot)
+function _setup_backends(backends::BackendTuple, snapshot::RunSnapshot)
     isempty(backends) && return ()
     handle = setup(first(backends), snapshot)
     rest = try

@@ -82,7 +82,7 @@ using Dates: Dates
             @test MCMCProgress.default_backend() === process_default
 
             explicit_backend = MCMCProgress.RecordingBackend()
-            @test MCMCProgress.resolve_backend(explicit_backend) === explicit_backend
+            @test MCMCProgress.resolve_backend(explicit_backend) === (explicit_backend,)
             @test MCMCProgress.resolve_backend(()) === ()
         finally
             MCMCProgress._DEFAULT_BACKEND[] = saved_default
