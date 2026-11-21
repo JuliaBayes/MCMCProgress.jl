@@ -329,7 +329,10 @@ end
     @testset "a backend that cannot refresh" begin
         backend = FailingBackend(:refresh)
         # The refresh task's exception is rethrown when the run stops it.
-        @test_throws "this backend cannot refresh" quick_run(backend) do run
+        @test_logs (
+            :error,
+            "A progress display failed while refreshing; sampling continues without a display.",
+        ) @test_throws "this backend cannot refresh" quick_run(backend) do run
             sleep(0.1)
             nothing
         end
