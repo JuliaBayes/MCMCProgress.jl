@@ -205,12 +205,7 @@ end
     reporting(cs) = any(ps -> ps.closed === nothing && 0 < ps.position < total, cs.phases)
     overlapping = count(s -> count(reporting, s.chains) >= 2, seen)
     # On one thread the chains run one after another, so no overlap is possible.
-    if Threads.nthreads() > 1
-        if overlapping > 0
-            @info "$overlapping of $(length(seen)) snapshots caught two or more chains reporting at once across $(Threads.nthreads()) threads"
-            @test overlapping > 0
-        end
-    end
+    Threads.nthreads() > 1 && @test overlapping > 0
 
     # A snapshot shows a prefix of the expected phases, closed ones at their final position.
     function consistent(s::RunSnapshot)
