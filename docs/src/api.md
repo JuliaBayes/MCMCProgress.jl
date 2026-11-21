@@ -44,6 +44,7 @@ MCMCProgress.close_phase!
 ## Backends
 
 ```@docs
+MCMCProgress.AbstractBackend
 MCMCProgress.ProgressLoggingBackend
 MCMCProgress.PlainTextBackend
 MCMCProgress.TermBackend

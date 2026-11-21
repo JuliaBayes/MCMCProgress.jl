@@ -1,5 +1,8 @@
 """
-    TermBackend(columns=nothing; columns_kwargs=Dict{Symbol,Any}())
+    TermBackend(
+        columns=nothing;
+        columns_kwargs=Dict{Symbol,Any}()
+    ) <: AbstractBackend
 
 A backend that draws one progress bar per chain with
 [Term.jl](https://github.com/FedeClaudi/Term.jl)'s `ProgressBar`, each bar
@@ -17,7 +20,7 @@ A zero-step phase uses a spinner while open and a completion tick when closed.
 Long titles are shortened to fit. Descriptions are shortened when needed to leave
 room for a progress bar. If other columns fill the terminal, the bar has zero width.
 """
-struct TermBackend{C}
+struct TermBackend{C} <: AbstractBackend
     columns::C
     columns_kwargs::Dict{Symbol,Any}
 
