@@ -1,4 +1,27 @@
 """
+    AbstractBackend
+
+An abstract type for backends that display or log the progress of an MCMC run.
+
+The `AbstractBackend` interface consists of five functions:
+
+| Function                | Called                      |
+|:----------------------- |:--------------------------- |
+| [`setup`](@ref)         | once, as the run starts     |
+| [`phase_opened`](@ref)  | when a chain enters a phase |
+| [`phase_closed`](@ref)  | when a chain leaves a phase |
+| [`refresh`](@ref)       | on a fixed clock            |
+| [`teardown`](@ref)      | once, as the run ends       |
+
+`phase_opened` and `phase_closed` default to doing nothing, so the minimal implementation
+consists of only `setup`, `refresh`, and `teardown`.
+
+A backend must not throw when a chain opens a phase at any point during the run,
+or when a run ends as `failed` or `interrupted`.
+"""
+abstract type AbstractBackend end
+
+"""
     setup(backend, snapshot::RunSnapshot) -> handle
 
 Turn `backend` into a handle holding whatever mutable state its display
@@ -8,23 +31,6 @@ with every chain present and no phase open yet.
 Every other function in the interface is called with what `setup` returns
 here, never with `backend` itself.
 
-# The interface
-
-A backend implements up to five functions, called at these points:
-
-| Function                       | Called                      |
-|:------------------------------ |:---------------------------|
-| `setup`                        | once, as the run starts     |
-| `phase_opened`                 | when a chain enters a phase |
-| `phase_closed`                 | when a chain leaves a phase |
-| `refresh`                      | on a fixed clock            |
-| `teardown`                     | once, as the run ends       |
-
-`phase_opened` and `phase_closed` default to doing nothing, so the smallest
-possible backend implements only `setup`, `refresh`, and `teardown`.
-
-A backend must not throw when a chain opens a phase at any point during the run,
-or when a run ends as `failed` or `interrupted`.
 """
 function setup end
 
@@ -74,7 +80,7 @@ package extension overrides this method, so selecting it before its package is
 loaded throws an error naming the package rather than a `MethodError` from
 inside [`setup`](@ref).
 """
-backend_package(::Any) = nothing
+backend_package(::AbstractBackend) = nothing
 
 """
     is_loaded(backend) -> Bool
@@ -82,9 +88,9 @@ backend_package(::Any) = nothing
 Returns `true` if the extension for `backend` is loaded or if `backend`
 doesn't require an extension.
 """
-is_loaded(backend) = backend_package(backend) === nothing
+is_loaded(backend::AbstractBackend) = backend_package(backend) === nothing
 
-function _check_backend_loaded(backend)
+function _check_backend_loaded(backend::AbstractBackend)
     is_loaded(backend) && return nothing
     pkg = backend_package(backend)
     throw(
@@ -108,7 +114,7 @@ no package extension.
 return a `UInt64` count of nanoseconds, as `time_ns` does. It is not called for
 a closed phase.
 """
-struct PlainTextBackend{F}
+struct PlainTextBackend{F} <: AbstractBackend
     io::IO
     now::F
 
@@ -126,7 +132,7 @@ Set the process-wide default backend: what `resolve_backend` returns
 for a run started without an explicit `backend` argument. Can be called from
 `startup.jl`. Throws if `backend` needs a package extension that is not loaded.
 """
-function set_backend!(backend)
+function set_backend!(backend::Union{AbstractBackend,Tuple})
     _check_backend_loaded(backend)
     _DEFAULT_BACKEND[] = backend
     return backend

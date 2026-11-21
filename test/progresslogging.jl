@@ -15,7 +15,7 @@ function Logging.handle_message(
     error("progress logger rejected the opening record")
 end
 
-struct PhaseCallbackFailure
+struct PhaseCallbackFailure <: MCMCProgress.AbstractBackend
     callback::Symbol
     persistent::Bool
     seen::Threads.Atomic{Bool}
