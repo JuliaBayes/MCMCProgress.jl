@@ -201,10 +201,9 @@ end
 
     names = ["Finding step size", "Warmup"]
 
-    # Only snapshots with two chains mid-phase test concurrent reads; report how many.
+    # Only snapshots with two chains mid-phase test concurrent reads; count them.
     reporting(cs) = any(ps -> ps.closed === nothing && 0 < ps.position < total, cs.phases)
     overlapping = count(s -> count(reporting, s.chains) >= 2, seen)
-    @info "$overlapping of $(length(seen)) snapshots caught two or more chains reporting at once across $(Threads.nthreads()) threads"
     # On one thread the chains run one after another, so no overlap is possible.
     Threads.nthreads() > 1 && @test overlapping > 0
 
