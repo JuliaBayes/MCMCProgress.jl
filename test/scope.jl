@@ -7,7 +7,7 @@ Records the start time of each refresh in `times`, and makes refresh number
 `long` sleep for `pause` seconds after recording its time. `times` is guarded by
 `lock`, so the body can read it during the run.
 """
-mutable struct ClockBackend
+mutable struct ClockBackend <: MCMCProgress.AbstractBackend
     times::Vector{UInt64}
     long::Int
     pause::Float64
@@ -40,7 +40,7 @@ refresh_times(backend::ClockBackend) = lock(() -> copy(backend.times), backend.l
 Records the name of every call in `calls`, and throws from the call named
 `failing`: one of `:setup`, `:refresh`, `:phase_closed` or `:teardown`.
 """
-mutable struct FailingBackend
+mutable struct FailingBackend <: MCMCProgress.AbstractBackend
     calls::Vector{Symbol}
     failing::Symbol
 end
@@ -79,7 +79,7 @@ sleeps, `inside` counts the backend calls in progress, and `overlapped` is set i
 a call starts while another is in progress. `calls` records the name of every
 call and is guarded by `lock`.
 """
-struct SlowRefreshBackend
+struct SlowRefreshBackend <: MCMCProgress.AbstractBackend
     pause::Float64
     refreshing::Threads.Atomic{Bool}
     inside::Threads.Atomic{Int}

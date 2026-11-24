@@ -63,7 +63,7 @@ using Dates: Dates
 
     @testset "phase_opened and phase_closed default to no-ops" begin
         if !isdefined(@__MODULE__, :NoOpTestBackend)
-            struct NoOpTestBackend end
+            struct NoOpTestBackend <: MCMCProgress.AbstractBackend end
         end
         p = MCMCProgress.Phase("Warmup", Determinate(10), ReentrantLock())
         ps = PhaseSnapshot(objectid(p), p.name, p.kind, p.position, p.opened, p.closed)
@@ -75,14 +75,15 @@ using Dates: Dates
         saved_default = MCMCProgress._DEFAULT_BACKEND[]
         try
             MCMCProgress._DEFAULT_BACKEND[] = nothing
-            @test MCMCProgress.resolve_backend() isa PlainTextBackend
+            @test MCMCProgress.default_backend() isa PlainTextBackend
 
-            default_backend = MCMCProgress.RecordingBackend()
-            set_backend!(default_backend)
-            @test MCMCProgress.resolve_backend() === default_backend  # falls back to the process-wide default
+            process_default = MCMCProgress.RecordingBackend()
+            set_backend!(process_default)
+            @test MCMCProgress.default_backend() === process_default
 
             explicit_backend = MCMCProgress.RecordingBackend()
-            @test MCMCProgress.resolve_backend(explicit_backend) === explicit_backend  # explicit argument wins
+            @test MCMCProgress.resolve_backend(explicit_backend) === (explicit_backend,)
+            @test MCMCProgress.resolve_backend(()) === ()
         finally
             MCMCProgress._DEFAULT_BACKEND[] = saved_default
         end
@@ -90,7 +91,7 @@ using Dates: Dates
 
     @testset "clear error for a backend whose extension is not loaded" begin
         if !isdefined(@__MODULE__, :UnloadedExtBackend)
-            struct UnloadedExtBackend end
+            struct UnloadedExtBackend <: MCMCProgress.AbstractBackend end
         end
         MCMCProgress.backend_package(::UnloadedExtBackend) = "FakeExtPackage"
 
